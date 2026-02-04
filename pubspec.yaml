@@ -1,0 +1,27 @@
+name: flutter_application_2
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+battery_plus: ^7.0.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/LH8n.png
+    - assets/wild_ksu_icon.png
+    - assets/ksu_icon.png
+    - assets/kernelsu_next.png
+    - assets/apatch_icon.png
