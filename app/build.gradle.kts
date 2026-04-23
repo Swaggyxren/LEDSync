@@ -15,10 +15,34 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFileProp = (findProperty("LEDTILE_STORE_FILE") as String?)
+                ?: System.getenv("LEDTILE_STORE_FILE")
+                ?: "../release.keystore"
+            val storePasswordProp = (findProperty("LEDTILE_STORE_PASSWORD") as String?)
+                ?: System.getenv("LEDTILE_STORE_PASSWORD")
+                ?: "ledtile123"
+            val keyAliasProp = (findProperty("LEDTILE_KEY_ALIAS") as String?)
+                ?: System.getenv("LEDTILE_KEY_ALIAS")
+                ?: "ledtile"
+            val keyPasswordProp = (findProperty("LEDTILE_KEY_PASSWORD") as String?)
+                ?: System.getenv("LEDTILE_KEY_PASSWORD")
+                ?: "ledtile123"
+            val ks = file(storeFileProp)
+            if (ks.exists()) {
+                storeFile = ks
+                storePassword = storePasswordProp
+                keyAlias = keyAliasProp
+                keyPassword = keyPasswordProp
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
