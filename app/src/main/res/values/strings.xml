@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LED Tile</string>
+    <string name="tile_label">LED</string>
+    <string name="info_body">This app only adds a Quick Settings tile labelled \"LED\".\n\nPull down the QS panel, tap the pencil/edit icon, then drag the \"LED\" tile into your active tiles.\n\nTapping the tile runs the configured root commands on /sys/led/led/tran_led_cmd.\n\nRoot (su) is required.</string>
+</resources>
