@@ -153,6 +153,13 @@ class BatteryListener {
       _inFull = false;
       _cancelFullTimer();
       _cancelLoopStopTimer();
+      // Parity with low/critical exit: a looping fullName would otherwise
+      // keep breathing forever while still plugged in if the level drops
+      // below fullTh (e.g. thermal throttle), so always stop the LED on
+      // exit when the effect is a looping pattern.
+      if (fullName != null && cfg.loopingPatterns.contains(fullName)) {
+        await RootLogic.turnOffAll();
+      }
     }
 
     if (wasInFull && !_inFull && !charging) {
