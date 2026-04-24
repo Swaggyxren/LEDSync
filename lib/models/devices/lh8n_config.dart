@@ -42,15 +42,14 @@ class LH8nConfig implements DeviceConfig {
     'Lightning': '00 05 01 03 00 00',
     'Rise': '00 05 01 04 00 00',
 
-    // Music breath (MODE 20, R1 = sub-effect 0..4)
-    'Mellow': '00 20 00 00 00 00',
-    'Groove': '00 20 01 00 00 00',
+    // Music breath (MODE 20, R1 = sub-effect — only 02/03 ship in the
+    // stock ROM's effect picker; the other indices are left out.)
     'Breathe': '00 20 02 00 00 00',
     'Party': '00 20 03 00 00 00',
-    'Electric': '00 20 04 00 00 00',
 
-    // Battery / charge breath (MODE 02, R1 = charge bucket)
-    // These are the OEM's built-in battery presets (red/mid/full).
+    // Battery / charge breath (MODE 02, R1 = charge bucket).
+    // OEM's built-in battery visuals — available as presets in
+    // BatteryConfigScreen but not used as the fallback defaults.
     'Low Battery': '00 02 00 00 00 00',
     'Charging': '00 02 01 00 00 00',
     'Charged': '00 02 02 00 00 00',
@@ -74,26 +73,24 @@ class LH8nConfig implements DeviceConfig {
     'Halo',
     'Lightning',
     'Rise',
-    // Music breath (all 5 sub-effects)
-    'Mellow',
-    'Groove',
+    // Music breath
     'Breathe',
     'Party',
-    'Electric',
     // Charge breath
     'Low Battery',
     'Charging',
     'Charged',
   };
 
-  // Battery-threshold defaults now use the OEM's dedicated charge breath
-  // patterns instead of reusing notification presets.
+  // Battery-threshold defaults keep the original notification presets —
+  // the MODE 02 charge-breath presets above are available in the UI but
+  // are not the out-of-box fallbacks.
   @override
-  String get defaultLowEffect => 'Low Battery';
+  String get defaultLowEffect => 'Rise';
   @override
-  String get defaultCriticalEffect => 'Low Battery';
+  String get defaultCriticalEffect => 'Lightning';
   @override
-  String get defaultFullEffect => 'Charged';
+  String get defaultFullEffect => 'Pureness';
 
   @override
   String get turnOffHex => '00 01 00 00 00 00';
