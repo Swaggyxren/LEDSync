@@ -72,9 +72,23 @@ class RootLogic {
     };
   }
 
-  static Future<void> initializeHardware() => ensureLedEnabled();
+  /// Mirrors Transsion `TranLightsServiceExtImpl.isLightActive`: the aw22xxx
+  /// controller only accepts `tran_led_cmd` effect writes after a one-time
+  /// prime (`hwen=1` + `brightness=255` + `00 00 00 00 00 00`). Re-priming on
+  /// every notification is expensive (~5 `su` execs) and slows LED reaction
+  /// by a couple hundred ms on LH8n, so we cache the primed state and only
+  /// re-run the sequence when explicitly invalidated (soft turn-off,
+  /// emergency revive, or `force: true`).
+  static bool _isLightActive = false;
 
-  static Future<void> ensureLedEnabled() async {
+  /// Force the next [ensureLedEnabled] call to re-prime the controller.
+  /// Exposed for callers that know the hardware was reset out-of-band.
+  static void markLedInactive() => _isLightActive = false;
+
+  static Future<void> initializeHardware() => ensureLedEnabled(force: true);
+
+  static Future<void> ensureLedEnabled({bool force = false}) async {
+    if (_isLightActive && !force) return;
     final cfg = await getConfig();
     await _runSu(
       'echo 1 > ${cfg.awPath}/hwen; '
@@ -83,32 +97,45 @@ class RootLogic {
       'echo none > ${cfg.awPath}/trigger 2>/dev/null || true; '
       "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}",
     );
+    _isLightActive = true;
   }
 
   static Future<void> sendRawHex(String hex) async {
     if (!masterEnabled) return;
     final cfg = await getConfig();
-    // Two su calls: first resets the controller, second writes the effect.
-    // The hardware needs the reset to fully complete before accepting the effect.
+    // Prime the controller on the first write (or after a kill). Subsequent
+    // writes are a single `su` exec thanks to the cached `_isLightActive`
+    // flag — matching the stock Transsion service's own fast-path.
     await ensureLedEnabled();
     await _runSu("echo -n '$hex' > ${cfg.lbCmd}");
   }
 
+  /// Soft turn-off: sends only the OEM's `turnOffHex` to `tran_led_cmd`.
+  /// `hwen` and `brightness` stay at their primed values so the next
+  /// [sendRawHex] doesn't have to power-cycle the aw22xxx controller
+  /// (a power-cycle costs ~200–400 ms on LH8n). Use
+  /// [emergencyKillAndRevive] if you need a full hardware reset.
   static Future<void> turnOffAll() async {
+    final cfg = await getConfig();
+    await _runSu("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}");
+    _isLightActive = false;
+  }
+
+  /// Hard reset: drop `hwen` + `brightness` to force the aw22xxx controller
+  /// to fully power-cycle, wait [offTime], then re-prime. Use this when the
+  /// LED is stuck in a bad state and a soft turn-off isn't enough.
+  static Future<void> emergencyKillAndRevive({
+    Duration offTime = const Duration(milliseconds: 250),
+  }) async {
     final cfg = await getConfig();
     await _runSu(
       "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; "
       'echo 0 > ${cfg.awPath}/brightness; '
       'echo 0 > ${cfg.awPath}/hwen',
     );
-  }
-
-  static Future<void> emergencyKillAndRevive({
-    Duration offTime = const Duration(milliseconds: 250),
-  }) async {
-    await turnOffAll();
+    _isLightActive = false;
     await Future.delayed(offTime);
-    await ensureLedEnabled();
+    await ensureLedEnabled(force: true);
   }
 
   static Future<ProcessResult> _runSu(String cmd) async {

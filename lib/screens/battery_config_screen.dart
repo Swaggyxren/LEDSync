@@ -23,9 +23,9 @@ class _BatteryConfigScreenState extends State<BatteryConfigScreen> {
   static const kFullT = 'batt_full_threshold';
 
   late final Future<DeviceConfig> _cfgFuture;
-  static const _defaultLowEffect = 'Rise';
-  static const _defaultCriticalEffect = 'Lightning';
-  static const _defaultFullEffect = 'Pureness';
+  static const _defaultLowEffect = 'Low Battery';
+  static const _defaultCriticalEffect = 'Low Battery';
+  static const _defaultFullEffect = 'Charged';
 
   String? _lowEffect, _critEffect, _fullEffect;
   int _lowT = 20, _critT = 10, _fullT = 100;
