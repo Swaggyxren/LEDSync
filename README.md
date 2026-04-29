@@ -16,7 +16,6 @@ A minimal Android app that adds a single **Quick Settings tile** to toggle an LE
   ```
 
 ## Requirements
-- Android 7.0 (API 24) or newer.
 - Root (Magisk / KernelSU) — the tile shells out through `su` and will toast "root command failed" if root is denied.
 - **TECNO POVA 5 Pro 5G** (or another device that exposes the exact same `/sys/led/led/tran_led_cmd` interface).
 
