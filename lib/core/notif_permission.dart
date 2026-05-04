@@ -9,10 +9,38 @@ class NotifPermission {
   // Session flag — prevents re-showing dialogs if user dismissed in this session
   static bool _sessionDismissed = false;
   static Timer? _waitTimer;
-  static bool _dialogActive = false;
 
-  /// Whether a NotifPermission dialog is currently displayed on screen.
-  static bool get isDialogActive => _dialogActive;
+  /// `showGeneralDialog` defaults to a 200 ms transition. We hold the active
+  /// flag for slightly longer than that after `Navigator.pop()` so callers
+  /// polling [isDialogActive] don't get a `false` reading while a dialog is
+  /// still visually fading out (the home-screen first-launch tooltip used to
+  /// race onto the screen during this window).
+  static const _kDialogPopGrace = Duration(milliseconds: 280);
+
+  /// Reference-counted active-dialog tracker. The two-step grant flow
+  /// (PermissionDialog → onOpenSettings → WaitingDialog) overlaps two
+  /// dialogs in time, so a plain bool would race: the outer dialog's pop
+  /// can resolve `await _showDialog` while the inner waiting dialog is
+  /// still on screen, leading observers to see `isDialogActive == false`
+  /// during a visible dialog. A counter covers the overlap correctly.
+  static int _dialogDepth = 0;
+
+  /// Whether any NotifPermission dialog is currently displayed (or still
+  /// inside the [_kDialogPopGrace] window for its exit animation).
+  static bool get isDialogActive => _dialogDepth > 0;
+
+  /// Wraps a dialog future so [_dialogDepth] tracks its lifetime, including
+  /// the post-pop animation grace. Use this for every `_showDialog` /
+  /// nested-dialog call so the counter is always balanced.
+  static Future<void> _trackDialog(Future<void> Function() body) async {
+    _dialogDepth++;
+    try {
+      await body();
+    } finally {
+      await Future.delayed(_kDialogPopGrace);
+      _dialogDepth--;
+    }
+  }
 
   static Future<bool> isEnabled() async {
     try {
@@ -50,21 +78,19 @@ class NotifPermission {
     // Step 1: POST_NOTIFICATIONS (Android 13+)
     final hasPost = await hasPostNotifications();
     if (!hasPost && context.mounted) {
-      _dialogActive = true;
-      await _showDialog(
-        context,
-        _PostNotifDialog(
-          onAllow: () async {
-            Navigator.of(context, rootNavigator: true).pop();
-            await requestPostNotifications();
-          },
-          onDismiss: () {
-            _sessionDismissed = true;
-            Navigator.of(context, rootNavigator: true).pop();
-          },
-        ),
-      );
-      _dialogActive = false;
+      await _trackDialog(() => _showDialog(
+            context,
+            _PostNotifDialog(
+              onAllow: () async {
+                Navigator.of(context, rootNavigator: true).pop();
+                await requestPostNotifications();
+              },
+              onDismiss: () {
+                _sessionDismissed = true;
+                Navigator.of(context, rootNavigator: true).pop();
+              },
+            ),
+          ));
     }
 
     if (_sessionDismissed) return;
@@ -73,23 +99,21 @@ class NotifPermission {
     final ok = await isEnabled();
     if (ok || !context.mounted) return;
 
-    _dialogActive = true;
-    await _showDialog(
-      context,
-      _PermissionDialog(
-        onOpenSettings: () async {
-          _sessionDismissed = false; // user is actively trying — allow re-check
-          Navigator.of(context, rootNavigator: true).pop();
-          await openSettings();
-          if (context.mounted) await _waitUntilEnabled(context);
-        },
-        onDismiss: () {
-          _sessionDismissed = true;
-          Navigator.of(context, rootNavigator: true).pop();
-        },
-      ),
-    );
-    _dialogActive = false;
+    await _trackDialog(() => _showDialog(
+          context,
+          _PermissionDialog(
+            onOpenSettings: () async {
+              _sessionDismissed = false; // user is actively trying — allow re-check
+              Navigator.of(context, rootNavigator: true).pop();
+              await openSettings();
+              if (context.mounted) await _waitUntilEnabled(context);
+            },
+            onDismiss: () {
+              _sessionDismissed = true;
+              Navigator.of(context, rootNavigator: true).pop();
+            },
+          ),
+        ));
   }
 
   static Future<void> _showDialog(BuildContext context, Widget child) =>
@@ -115,8 +139,8 @@ class NotifPermission {
   static Future<void> _waitUntilEnabled(BuildContext context) async {
     if (!context.mounted) return;
     _waitTimer?.cancel();
-    _dialogActive = true;
-    showGeneralDialog(
+    _dialogDepth++;
+    final waitFuture = showGeneralDialog(
       context: context,
       barrierDismissible: false,
       barrierLabel: '',
@@ -126,18 +150,24 @@ class NotifPermission {
     int elapsed = 0;
     _waitTimer = Timer.periodic(const Duration(milliseconds: 450), (t) async {
       elapsed += 450;
-      if (await isEnabled()) {
-        t.cancel();
-        _waitTimer = null;
-        if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-        _dialogActive = false;
-      } else if (elapsed >= 60000) {
-        t.cancel();
-        _waitTimer = null;
-        if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-        _dialogActive = false;
+      final granted = await isEnabled();
+      final timedOut = elapsed >= 60000;
+      if (!granted && !timedOut) return;
+      t.cancel();
+      _waitTimer = null;
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
       }
     });
+    try {
+      await waitFuture;
+    } finally {
+      // Hold the dialog-depth counter through the exit animation grace
+      // before decrementing, so observers don't see `isDialogActive=false`
+      // while the WaitingDialog is still visually fading out.
+      await Future.delayed(_kDialogPopGrace);
+      _dialogDepth--;
+    }
   }
 }
 

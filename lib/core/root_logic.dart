@@ -6,8 +6,35 @@ import 'package:ledsync/models/devices/device_config.dart';
 import 'package:ledsync/models/devices/lh8n_config.dart';
 
 class RootLogic {
+  /// In-memory mirror of the persisted master toggle. Defaults to `true`
+  /// for fresh installs; replaced by [loadMasterEnabled] on app start so
+  /// callers reading this field synchronously after that point get the
+  /// real value. The Kotlin notification service reads the same key
+  /// (`flutter.master_enabled`) directly from SharedPreferences so the
+  /// toggle covers both code paths.
+  static const _kMasterEnabledKey = 'master_enabled';
   static bool masterEnabled = true;
   static bool? _cachedRooted;
+
+  /// Hydrate [masterEnabled] from persisted prefs. Safe to call repeatedly;
+  /// no-op once the value has been loaded.
+  static Future<void> loadMasterEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    masterEnabled = prefs.getBool(_kMasterEnabledKey) ?? true;
+  }
+
+  /// Set + persist the master toggle. When disabled, [sendRawHex] short-
+  /// circuits and the Kotlin service skips notifications too. We also
+  /// soft-stop the LED on disable so a currently-running pattern doesn't
+  /// keep breathing forever.
+  static Future<void> setMasterEnabled(bool value) async {
+    masterEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kMasterEnabledKey, value);
+    if (!value) {
+      await turnOffAll();
+    }
+  }
 
   // ── Active config — user-chosen, persisted ─────────────────────────────
   static DeviceConfig? _currentConfig;

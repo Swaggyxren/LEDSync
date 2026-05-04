@@ -521,9 +521,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!await NotifPermission.isEnabled()) return; // never granted — skip
     if (NotifPermission.isDialogActive) return; // dialog still showing — skip
 
-    await prefs.setBool(_kTooltipShown, true);
-    await Future.delayed(const Duration(milliseconds: 600));
+    // Pre-grace check passed; give the WaitingDialog's exit animation a
+    // full second to finish (NotifPermission's _kDialogPopGrace is 280 ms,
+    // but route-removal + a final frame of decoration cleanup pushes the
+    // safe window closer to ~700 ms in practice). Re-check the flag after
+    // the delay to catch any nested dialog that opened during the wait.
+    await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
+    if (NotifPermission.isDialogActive) return;
+    if (!await NotifPermission.isEnabled()) return;
+
+    await prefs.setBool(_kTooltipShown, true);
     _showSettingsTooltip();
   }
 

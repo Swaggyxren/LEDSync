@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:ledsync/core/root_logic.dart';
 import 'package:ledsync/screens/battery_config_screen.dart';
 import 'package:ledsync/screens/notification_config_screen.dart';
 
@@ -32,6 +33,19 @@ class TweaksScreen extends StatelessWidget {
           Text('Tweaks',
               style: TextStyle(fontFamily: 'SpaceGrotesk', 
                 color: cs.onSurface, fontWeight: FontWeight.bold, fontSize: 26)),
+          const SizedBox(height: 24),
+
+          // Section label
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text('GENERAL',
+                style: TextStyle(
+                  color: cs.outline,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11, letterSpacing: 1.5)),
+          ),
+
+          const _MasterToggleTile(),
           const SizedBox(height: 24),
 
           // Section label
@@ -103,6 +117,101 @@ class TweaksScreen extends StatelessWidget {
               ]),
             ),
             Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant, size: 22),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Master on/off for the LED service. Persists via [RootLogic.setMasterEnabled]
+/// and is read by both the Flutter side ([RootLogic.sendRawHex]) and the
+/// Kotlin notification listener (via SharedPreferences). Disabling it also
+/// soft-stops the LED so a running pattern doesn't keep breathing.
+class _MasterToggleTile extends StatefulWidget {
+  const _MasterToggleTile();
+
+  @override
+  State<_MasterToggleTile> createState() => _MasterToggleTileState();
+}
+
+class _MasterToggleTileState extends State<_MasterToggleTile> {
+  bool _enabled = RootLogic.masterEnabled;
+  bool _busy = false;
+
+  Future<void> _toggle(bool v) async {
+    if (_busy) return;
+    setState(() {
+      _enabled = v;
+      _busy = true;
+    });
+    try {
+      await RootLogic.setMasterEnabled(v);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final iconBg = _enabled ? cs.primaryContainer : cs.surfaceContainerHighest;
+    final iconColor = _enabled ? cs.onPrimaryContainer : cs.onSurfaceVariant;
+    return Card(
+      color: cs.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: InkWell(
+        onTap: _busy ? null : () => _toggle(!_enabled),
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                _enabled
+                    ? Icons.power_settings_new_rounded
+                    : Icons.power_off_outlined,
+                color: iconColor,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'LED Service',
+                    style: TextStyle(
+                      fontFamily: 'SpaceGrotesk',
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _enabled
+                        ? 'Notifications and battery events drive the LED'
+                        : 'All LED writes paused',
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _enabled,
+              onChanged: _busy ? null : _toggle,
+            ),
           ]),
         ),
       ),

@@ -32,9 +32,19 @@ class NotificationLedService : NotificationListenerService() {
 
     // ── State ─────────────────────────────────────────────────────────────────
     // Per-package last-trigger time for non-looping (one-shot × 5) patterns.
+    // Pruned in recordTrigger() so the map can't grow unbounded over time.
     private val lastTriggerPerPkg = HashMap<String, Long>()
     // Packages currently running a looping pattern — prevents re-fire.
     private val activeLoopingPkgs = mutableSetOf<String>()
+
+    /**
+     * Mirrors Transsion `TranLightsServiceExtImpl.isLightActive` and matches
+     * the Flutter-side `RootLogic._isLightActive` cache. Without this flag the
+     * Kotlin path ran the full prime sequence (hwen=1, imax=c, brightness=255,
+     * trigger=none, 00 00 00 00 00 00) on every notification — that's an extra
+     * `su` exec per LED event and a noticeable lag spike on LH8n.
+     */
+    @Volatile private var isLightActive = false
 
     // ── System services ───────────────────────────────────────────────────────
     private val handler = Handler(Looper.getMainLooper())
@@ -121,29 +131,37 @@ class NotificationLedService : NotificationListenerService() {
     }
 
     /**
-     * Single su call: enable hardware + reset controller + write effect hex.
-     * Previously two separate runSu calls had a timing gap that caused
-     * the effect write to be missed intermittently.
+     * Prime + write the effect hex. The prime sequence (hwen=1 / imax=c /
+     * brightness=255 / trigger=none / 00 00 00 00 00 00) only runs the first
+     * time after a stop — subsequent fires reuse the primed controller. This
+     * matches the OEM service's `isLightActive` fast-path and turns each
+     * normal trigger into a single `su` exec instead of two.
      */
     private fun fireEffect(hex: String, tag: String): Boolean {
-        // Step 1: reset controller (must complete before effect write)
-        runSu(
-            "echo 1 > $HWEN_PATH; " +
-            "echo c > /sys/class/leds/aw22xxx_led/imax 2>/dev/null || true; " +
-            "echo 255 > $BRIGHT_PATH; " +
-            "echo none > /sys/class/leds/aw22xxx_led/trigger 2>/dev/null || true; " +
-            "echo -n '00 00 00 00 00 00' > $LB_CMD_PATH"
-        )
-        // Step 2: write effect hex
+        if (!isLightActive) {
+            runSu(
+                "echo 1 > $HWEN_PATH; " +
+                "echo c > /sys/class/leds/aw22xxx_led/imax 2>/dev/null || true; " +
+                "echo 255 > $BRIGHT_PATH; " +
+                "echo none > /sys/class/leds/aw22xxx_led/trigger 2>/dev/null || true; " +
+                "echo -n '00 00 00 00 00 00' > $LB_CMD_PATH"
+            )
+            isLightActive = true
+        }
         val ok = runSu("echo -n '$hex' > $LB_CMD_PATH")
-        Log.d("NotifLED", "$tag -> ok=$ok hex='$hex'")
+        Log.d("NotifLED", "$tag -> ok=$ok hex='$hex' (primed=true)")
         return ok
     }
 
-    /** Stop command — no need to enable engine, just send the off hex. */
+    /**
+     * Stop command — soft turn-off only. Mirrors the OEM behavior of clearing
+     * `isLightActive` after the stop hex; the kernel may transition the
+     * controller to a lower-power state, so the next fire re-primes.
+     */
     private fun fireStop(hex: String, tag: String): Boolean {
         val ok = runSu("echo -n '$hex' > $LB_CMD_PATH")
         Log.d("NotifLED", "$tag -> ok=$ok hex='$hex'")
+        isLightActive = false
         return ok
     }
 
@@ -199,9 +217,7 @@ class NotificationLedService : NotificationListenerService() {
                     // Write 2 after delay — set cooldown only after both writes done
                     Thread.sleep(DOUBLE_FIRE_DELAY_MS)
                     fireEffect(hex, "FIRE2[$pkg]")
-                    synchronized(lastTriggerPerPkg) {
-                        lastTriggerPerPkg[pkg] = System.currentTimeMillis()
-                    }
+                    recordTrigger(pkg)
                 } else {
                     // Auto-stop after 5 s if notification wasn't cleared yet
                     handler.postDelayed({
@@ -228,6 +244,24 @@ class NotificationLedService : NotificationListenerService() {
 
     // ── Notification callbacks ─────────────────────────────────────────────────
 
+    /**
+     * Insert/refresh a per-package cooldown entry and prune anything older
+     * than the cooldown window — entries past that can never affect future
+     * decisions, so dropping them keeps the map bounded by the number of
+     * apps that fired within the last cooldown period.
+     */
+    private fun recordTrigger(pkg: String) {
+        val now = System.currentTimeMillis()
+        synchronized(lastTriggerPerPkg) {
+            val cutoff = now - SEQUENCE_COOLDOWN_MS
+            val it = lastTriggerPerPkg.entries.iterator()
+            while (it.hasNext()) {
+                if (it.next().value < cutoff) it.remove()
+            }
+            lastTriggerPerPkg[pkg] = now
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         try {
             val pkg = sbn.packageName ?: return
@@ -235,6 +269,14 @@ class NotificationLedService : NotificationListenerService() {
             val prefs = applicationContext.getSharedPreferences(
                 "FlutterSharedPreferences", Context.MODE_PRIVATE
             )
+
+            // Master toggle — gate the entire service on the same prefs flag
+            // RootLogic uses on the Flutter side. Defaults true so existing
+            // installs keep working before the user touches the toggle.
+            if (!prefs.getBoolean("flutter.master_enabled", true)) {
+                Log.d("NotifLED", "master_enabled=false, skip $pkg")
+                return
+            }
 
             val raw = prefs.getString("flutter.notif_hex_map", null)
             if (raw.isNullOrBlank()) {
@@ -290,6 +332,8 @@ class NotificationLedService : NotificationListenerService() {
             val prefs = applicationContext.getSharedPreferences(
                 "FlutterSharedPreferences", Context.MODE_PRIVATE
             )
+
+            if (!prefs.getBoolean("flutter.master_enabled", true)) return
 
             // Only looping patterns need an explicit stop.
             val loopingPkgs = readLoopingPkgs(prefs)

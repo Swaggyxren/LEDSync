@@ -8,8 +8,11 @@ import 'package:ledsync/screens/home_screen.dart';
 import 'package:ledsync/screens/led_menu.dart';
 import 'package:ledsync/screens/tweaks_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Hydrate the master toggle before anything renders so the first
+  // notification / battery event sees the user's saved state.
+  await RootLogic.loadMasterEnabled();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
