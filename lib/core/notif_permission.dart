@@ -140,7 +140,15 @@ class NotifPermission {
     if (!context.mounted) return;
     _waitTimer?.cancel();
     _dialogDepth++;
-    final waitFuture = showGeneralDialog(
+    // Own the wait lifecycle via a local Completer instead of awaiting
+    // showGeneralDialog's future. If the user backgrounds the app while
+    // the WaitingDialog is up, `context.mounted` becomes false and we
+    // skip Navigator.pop() — at which point showGeneralDialog's future
+    // would never resolve and `_dialogDepth` would leak forever. Driving
+    // completion from the timer guarantees the counter is balanced
+    // regardless of mount state.
+    final done = Completer<void>();
+    showGeneralDialog(
       context: context,
       barrierDismissible: false,
       barrierLabel: '',
@@ -158,9 +166,10 @@ class NotifPermission {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
+      if (!done.isCompleted) done.complete();
     });
     try {
-      await waitFuture;
+      await done.future;
     } finally {
       // Hold the dialog-depth counter through the exit animation grace
       // before decrementing, so observers don't see `isDialogActive=false`

@@ -139,13 +139,21 @@ class NotificationLedService : NotificationListenerService() {
      */
     private fun fireEffect(hex: String, tag: String): Boolean {
         if (!isLightActive) {
-            runSu(
+            // Gate the cache flag on the prime actually succeeding. If `su`
+            // is denied or the kernel rejects the write, leaving the flag
+            // false lets the next fire retry the prime instead of writing
+            // effect hex to a dead controller forever.
+            val primed = runSu(
                 "echo 1 > $HWEN_PATH; " +
                 "echo c > /sys/class/leds/aw22xxx_led/imax 2>/dev/null || true; " +
                 "echo 255 > $BRIGHT_PATH; " +
                 "echo none > /sys/class/leds/aw22xxx_led/trigger 2>/dev/null || true; " +
                 "echo -n '00 00 00 00 00 00' > $LB_CMD_PATH"
             )
+            if (!primed) {
+                Log.w("NotifLED", "$tag prime FAILED — skipping effect write")
+                return false
+            }
             isLightActive = true
         }
         val ok = runSu("echo -n '$hex' > $LB_CMD_PATH")
