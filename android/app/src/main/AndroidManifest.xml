@@ -1,5 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.xiiann.ledsync">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Notification listener access (system-granted, not runtime) -->
     <!-- POST_NOTIFICATIONS: runtime permission required on Android 13+ -->
@@ -7,7 +6,6 @@
 
     <!-- Keeps the service alive as a foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- dataSync type: required on Android 14+ for background data processing FGS -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Prevents CPU sleep during root/LED writes -->
@@ -16,24 +14,21 @@
     <!-- Restart service after reboot or app update -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Query installed applications for App LED Sync -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <application
+        android:name=".LedApp"
         android:label="LEDSync"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".presentation.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
-            android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -41,9 +36,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Notification listener service — runs as foreground to survive OEM battery killers -->
+        <!-- Notification listener & battery service -->
         <service
-            android:name=".NotificationLedService"
+            android:name=".service.LedCoreService"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:foregroundServiceType="dataSync"
             android:exported="true">
@@ -54,7 +49,7 @@
 
         <!-- Restarts the notification listener after reboot or app update -->
         <receiver
-            android:name=".BootReceiver"
+            android:name=".service.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -62,13 +57,12 @@
             </intent-filter>
         </receiver>
 
-        <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
 
     <queries>
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
     </queries>
 </manifest>
