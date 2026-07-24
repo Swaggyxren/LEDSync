@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -249,10 +250,10 @@ fun MainShell(
                                 Box(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 ) {
-                                    // Sliding Pill Active Indicator
+                                    // Sliding Pill Active Indicator (uses offset to gracefully support spring bouncy overshoot)
                                     Box(
                                         modifier = Modifier
-                                            .padding(start = indicatorOffset)
+                                            .offset(x = indicatorOffset)
                                             .width(88.dp)
                                             .height(48.dp)
                                             .clip(CircleShape)
