@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -225,7 +226,7 @@ fun MainShell(
                                 }
                             }
 
-                            // Floating Navigation Dock
+                            // Expressive M3 Sliding Indicator Floating Navigation Dock
                             Surface(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -236,63 +237,79 @@ fun MainShell(
                                 tonalElevation = 8.dp,
                                 shadowElevation = 12.dp
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    tabs.forEachIndexed { index, tab ->
-                                        val selected = selectedTab == index
-                                        val containerColor by animateColorAsState(
-                                            targetValue = if (selected) cs.primaryContainer else cs.surfaceContainerHighest,
-                                            animationSpec = spring(stiffness = Spring.StiffnessLow),
-                                            label = "tabContainerColor"
-                                        )
-                                        val iconTextColor by animateColorAsState(
-                                            targetValue = if (selected) cs.onPrimaryContainer else cs.outline,
-                                            animationSpec = spring(stiffness = Spring.StiffnessLow),
-                                            label = "tabIconTextColor"
-                                        )
-                                        val iconScale by animateFloatAsState(
-                                            targetValue = if (selected) 1.15f else 1.0f,
-                                            animationSpec = spring(
-                                                stiffness = Spring.StiffnessMediumLow,
-                                                dampingRatio = Spring.DampingRatioLowBouncy
-                                            ),
-                                            label = "tabIconScale"
-                                        )
+                                val indicatorOffset by animateDpAsState(
+                                    targetValue = (92 * selectedTab).dp,
+                                    animationSpec = spring(
+                                        stiffness = Spring.StiffnessMediumLow,
+                                        dampingRatio = Spring.DampingRatioLowBouncy
+                                    ),
+                                    label = "expressiveDockIndicatorOffset"
+                                )
 
-                                        Box(
-                                            modifier = Modifier
-                                                .width(88.dp)
-                                                .clip(CircleShape)
-                                                .background(containerColor)
-                                                .bounceClick { selectedTab = index }
-                                                .padding(vertical = 8.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    // Sliding Pill Active Indicator
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(start = indicatorOffset)
+                                            .width(88.dp)
+                                            .height(48.dp)
+                                            .clip(CircleShape)
+                                            .background(cs.primaryContainer)
+                                    )
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        tabs.forEachIndexed { index, tab ->
+                                            val selected = selectedTab == index
+                                            val iconTextColor by animateColorAsState(
+                                                targetValue = if (selected) cs.onPrimaryContainer else cs.outline,
+                                                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                                label = "tabIconTextColor"
+                                            )
+                                            val iconScale by animateFloatAsState(
+                                                targetValue = if (selected) 1.20f else 1.0f,
+                                                animationSpec = spring(
+                                                    stiffness = Spring.StiffnessMediumLow,
+                                                    dampingRatio = Spring.DampingRatioLowBouncy
+                                                ),
+                                                label = "tabIconScale"
+                                            )
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(88.dp)
+                                                    .height(48.dp)
+                                                    .clip(CircleShape)
+                                                    .bounceClick { selectedTab = index },
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
-                                                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                                    contentDescription = tab.title,
-                                                    tint = iconTextColor,
-                                                    modifier = Modifier
-                                                        .size(20.dp)
-                                                        .graphicsLayer {
-                                                            scaleX = iconScale
-                                                            scaleY = iconScale
-                                                        }
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = tab.title,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                                    color = iconTextColor
-                                                )
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                        contentDescription = tab.title,
+                                                        tint = iconTextColor,
+                                                        modifier = Modifier
+                                                            .size(20.dp)
+                                                            .graphicsLayer {
+                                                                scaleX = iconScale
+                                                                scaleY = iconScale
+                                                            }
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = tab.title,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                        color = iconTextColor
+                                                    )
+                                                }
                                             }
                                         }
                                     }
