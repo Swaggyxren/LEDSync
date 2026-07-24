@@ -39,11 +39,18 @@ jobs:
       - name: Build Release APK
         run: cd android && ./gradlew assembleRelease --no-daemon
 
+      - name: Find Release APK
+        id: find_apk
+        run: |
+          APK_FILE=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          echo "Found APK: $APK_FILE"
+          echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LEDSync-v2.0.1-release-apk
-          path: android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Send Telegram Notification & APK
@@ -58,36 +65,39 @@ jobs:
           fi
 
           SHORT_SHA=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/"/\\"/g')
+          RAW_COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          CLEAN_COMMIT_MSG=$(echo "$RAW_COMMIT_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
           COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
           BRANCH_NAME="${GITHUB_REF_NAME:-unknown}"
           JOB_STATUS="${{ job.status }}"
 
-          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk"
+          APK_PATH="${{ steps.find_apk.outputs.apk_path }}"
 
           if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
             CAPTION="🚀 <b>LEDSync v2.0.1 Release Build Success</b>
 
 📌 <b>Commit:</b> <code>${SHORT_SHA}</code>
-📝 <b>Message:</b> ${COMMIT_MSG}
+📝 <b>Message:</b> ${CLEAN_COMMIT_MSG}
 👤 <b>Author:</b> ${COMMIT_AUTHOR}
 🌿 <b>Branch:</b> ${BRANCH_NAME}"
 
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
               -F document=@"${APK_PATH}" \
               -F caption="${CAPTION}" \
-              -F parse_mode="HTML"
+              -F parse_mode="HTML")
+            echo "Telegram API Response: $RESPONSE"
           else
             CAPTION="❌ <b>LEDSync Release Build Failed</b>
 
 📌 <b>Commit:</b> <code>${SHORT_SHA}</code>
-📝 <b>Message:</b> ${COMMIT_MSG}
+📝 <b>Message:</b> ${CLEAN_COMMIT_MSG}
 👤 <b>Author:</b> ${COMMIT_AUTHOR}
 🌿 <b>Branch:</b> ${BRANCH_NAME}"
 
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F text="${CAPTION}" \
-              -F parse_mode="HTML"
+            RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="${CAPTION}" \
+              -d parse_mode="HTML")
+            echo "Telegram API Response: $RESPONSE"
           fi
