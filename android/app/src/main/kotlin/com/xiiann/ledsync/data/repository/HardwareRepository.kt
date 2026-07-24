@@ -150,7 +150,6 @@ class HardwareRepository @Inject constructor(
 
     suspend fun emergencyKillAndRevive(offTimeMs: Long = 250L): Boolean {
         log("[${dateFormat.format(Date())}] Emergency Stop — killing LED service…", LogLevel.WARNING)
-        _isReady.value = false
         val cfg = activeConfig
         val killCmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; " +
                 "echo 0 > ${cfg.awPath}/brightness; " +
