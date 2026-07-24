@@ -1,7 +1,6 @@
 package com.xiiann.ledsync.presentation.audioled
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,8 +35,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -46,6 +46,7 @@ fun AudioLedScreen(
     viewModel: AudioLedViewModel,
     onBack: () -> Unit
 ) {
+    val isEnabled by viewModel.isEnabled.collectAsState()
     val isDynamic by viewModel.isDynamic.collectAsState()
     val cs = MaterialTheme.colorScheme
 
@@ -93,9 +94,76 @@ fun AudioLedScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Main Mode Selection Card
+            // Master Enable Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isEnabled) cs.primaryContainer.copy(alpha = 0.5f) else cs.surfaceContainerHigh
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(if (isEnabled) cs.primary else cs.surfaceContainerHighest),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = null,
+                                tint = if (isEnabled) cs.onPrimary else cs.outline,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable Audio Reactive LED",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isEnabled) "Audio reactive mode is active" else "Audio reactive mode is turned off",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cs.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = { viewModel.toggleEnable(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = cs.onPrimary,
+                                checkedTrackColor = cs.primary,
+                                uncheckedThumbColor = cs.outline,
+                                uncheckedTrackColor = cs.surfaceContainerHighest
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Mode Selection Card (Static vs Dynamic)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (isEnabled) 1.0f else 0.5f),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
             ) {
@@ -110,13 +178,13 @@ fun AudioLedScreen(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
-                                .background(if (isDynamic) cs.primaryContainer else cs.secondaryContainer),
+                                .background(if (isEnabled && isDynamic) cs.primaryContainer else cs.secondaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = if (isDynamic) Icons.Default.GraphicEq else Icons.Default.MusicNote,
                                 contentDescription = null,
-                                tint = if (isDynamic) cs.onPrimaryContainer else cs.onSecondaryContainer,
+                                tint = if (isEnabled && isDynamic) cs.onPrimaryContainer else cs.onSecondaryContainer,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -142,6 +210,7 @@ fun AudioLedScreen(
 
                         Switch(
                             checked = isDynamic,
+                            enabled = isEnabled,
                             onCheckedChange = { viewModel.toggleMode(it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = cs.onPrimary,
@@ -156,7 +225,7 @@ fun AudioLedScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Explanation / Details Card
+            // Enhanced Feature Description Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -166,14 +235,14 @@ fun AudioLedScreen(
                     modifier = Modifier.padding(18.dp)
                 ) {
                     Text(
-                        text = "Hardware Integration",
+                        text = "Hardware Integration & Behavior",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = cs.primary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Audio Reactive mode communicates directly with the kernel LED driver sysfs interface. Toggling engages hardware mode immediately.",
+                        text = "Toggling switch engages Dynamic RGB audio reactivity or Static white ambient lighting. Master toggle completely turns off audio LED hardware mode when not needed.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = cs.onSurfaceVariant
                     )

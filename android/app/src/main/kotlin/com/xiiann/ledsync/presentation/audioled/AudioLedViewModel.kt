@@ -18,15 +18,34 @@ class AudioLedViewModel @Inject constructor(
     private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
+    val isEnabled: StateFlow<Boolean> = preferencesRepository.audioLedEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val isDynamic: StateFlow<Boolean> = preferencesRepository.audioLedDynamic
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun toggleEnable(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setAudioLedEnabled(enabled)
+            if (enabled) {
+                val dynamic = isDynamic.value
+                hardwareRepository.setAudioReactiveMode(
+                    if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
+                )
+            } else {
+                hardwareRepository.turnOffAudioReactive()
+            }
+        }
+    }
 
     fun toggleMode(dynamic: Boolean) {
         viewModelScope.launch {
             preferencesRepository.setAudioLedDynamic(dynamic)
-            hardwareRepository.setAudioReactiveMode(
-                if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
-            )
+            if (isEnabled.value) {
+                hardwareRepository.setAudioReactiveMode(
+                    if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
+                )
+            }
         }
     }
 }
