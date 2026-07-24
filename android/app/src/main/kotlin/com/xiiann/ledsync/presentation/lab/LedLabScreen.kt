@@ -181,7 +181,7 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Emergency Hardware Reset Button (Safety action: calm non-bouncy motion per M3 Spec §6)
+        // Emergency Hardware Reset Button
         Button(
             onClick = {
                 activeEffect = null
@@ -206,7 +206,6 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             )
         }
 
-        // Bottom spacing so button sits comfortably above Floating Navigation Dock
         Spacer(modifier = Modifier.height(100.dp))
     }
 }
@@ -219,9 +218,12 @@ fun AospLogConsole(
     val cs = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
 
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) {
-            listState.animateScrollToItem(logs.size - 1)
+    // Take recent logs to keep UI light and fast
+    val recentLogs = remember(logs) { logs.takeLast(60) }
+
+    LaunchedEffect(recentLogs.size) {
+        if (recentLogs.isNotEmpty()) {
+            listState.scrollToItem(recentLogs.size - 1)
         }
     }
 
@@ -255,7 +257,7 @@ fun AospLogConsole(
 
             // Log stream
             Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                if (logs.isEmpty()) {
+                if (recentLogs.isEmpty()) {
                     Text(
                         text = "No LED activity recorded.\nSelect an effect preset below.",
                         fontSize = 11.sp,
@@ -265,7 +267,10 @@ fun AospLogConsole(
                     )
                 } else {
                     LazyColumn(state = listState) {
-                        items(logs) { entry ->
+                        items(
+                            items = recentLogs,
+                            key = { entry -> entry.timestamp + "_" + entry.message.hashCode() }
+                        ) { entry ->
                             val color = when (entry.level) {
                                 LogLevel.SUCCESS -> ConsoleSuccess
                                 LogLevel.WARNING -> ConsoleWarning
