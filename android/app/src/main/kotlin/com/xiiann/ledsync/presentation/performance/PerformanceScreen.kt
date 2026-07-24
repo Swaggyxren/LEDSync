@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,7 +66,7 @@ fun PerformanceScreen(
                 .padding(padding)
                 .statusBarsPadding()
         ) {
-            // Header
+            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -88,10 +90,10 @@ fun PerformanceScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                // CPU Sparkline Card
+                // 1. CPU Sparkline Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -103,14 +105,14 @@ fun PerformanceScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(cs.primaryContainer),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(imageVector = Icons.Default.Speed, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(18.dp))
+                                    Icon(imageVector = Icons.Default.Speed, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(20.dp))
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(text = "CPU Load", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
                                     Text(text = "Realtime usage graph", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
@@ -118,7 +120,7 @@ fun PerformanceScreen(
                             }
                             Text(
                                 text = "${(metrics.cpuPct * 100).toInt()}%",
-                                style = MaterialTheme.typography.displayMedium,
+                                style = MaterialTheme.typography.displaySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = cs.primary
                             )
@@ -136,26 +138,26 @@ fun PerformanceScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Memory Allocation Card
+                // 2. Memory Allocation Card (Clean height without empty space)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(cs.secondaryContainer),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(imageVector = Icons.Default.Memory, contentDescription = null, tint = cs.onSecondaryContainer, modifier = Modifier.size(18.dp))
+                                Icon(imageVector = Icons.Default.Memory, contentDescription = null, tint = cs.onSecondaryContainer, modifier = Modifier.size(20.dp))
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(text = "RAM Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
                                 Text(text = "Physical memory allocation", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
@@ -183,35 +185,142 @@ fun PerformanceScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceAround
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            AospRamChip(label = "USED", valueMb = ramUsed, color = cs.secondary)
-                            AospRamChip(label = "FREE", valueMb = ramAvail, color = cs.outline)
-                            AospRamChip(label = "TOTAL", valueMb = ramTotal, color = cs.onSurface)
+                            AospStatChip(label = "USED", value = "${"%.1f".format(ramUsed / 1024f)} GB", color = cs.secondary, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "FREE", value = "${"%.1f".format(ramAvail / 1024f)} GB", color = cs.outline, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "TOTAL", value = "${"%.1f".format(ramTotal / 1024f)} GB", color = cs.onSurface, modifier = Modifier.weight(1f))
                         }
-
-                        Spacer(modifier = Modifier.height(100.dp))
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 3. Storage Capacity Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(cs.tertiaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(imageVector = Icons.Default.SdStorage, contentDescription = null, tint = cs.onTertiaryContainer, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(text = "Storage Capacity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
+                                Text(text = "Internal flash storage breakdown", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        val storageUsed = metrics.storageUsedGb
+                        val storageTotal = metrics.storageTotalGb
+                        val storageFree = (storageTotal - storageUsed).coerceAtLeast(0f)
+                        val storageFrac = if (storageTotal > 0f) (storageUsed / storageTotal).coerceIn(0f, 1f) else 0f
+
+                        LinearProgressIndicator(
+                            progress = { storageFrac },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(CircleShape),
+                            color = cs.tertiary,
+                            trackColor = cs.surfaceContainerHighest
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            AospStatChip(label = "USED", value = "${"%.1f".format(storageUsed)} GB", color = cs.tertiary, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "FREE", value = "${"%.1f".format(storageFree)} GB", color = cs.outline, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "TOTAL", value = "${"%.1f".format(storageTotal)} GB", color = cs.onSurface, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 4. System Diagnostics & Uptime Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(cs.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(imageVector = Icons.Default.Dns, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(text = "System Diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
+                                Text(text = "Kernel & sysfs controller uptime", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            AospStatChip(label = "UPTIME", value = metrics.uptimeFormatted, color = cs.primary, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "SYSFS LED", value = "Active", color = cs.secondary, modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AospStatChip(label = "KERNEL", value = "Linux", color = cs.onSurface, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+
+                // Comfortable bottom padding so scroll area sits nicely above floating nav dock
+                Spacer(modifier = Modifier.height(100.dp))
             }
         }
     }
 }
 
 @Composable
-fun AospRamChip(label: String, valueMb: Int, color: Color) {
+fun AospStatChip(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
     val cs = MaterialTheme.colorScheme
-    val gb = (valueMb / 1024f).let { "%.1f".format(it) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
             .background(cs.surfaceContainerHighest)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 10.dp, vertical = 10.dp)
     ) {
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = color, letterSpacing = 1.1.sp)
-        Text(text = "$gb GB", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = cs.onSurface)
     }
 }
 

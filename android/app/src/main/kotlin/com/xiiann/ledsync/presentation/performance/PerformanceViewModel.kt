@@ -1,5 +1,8 @@
 package com.xiiann.ledsync.presentation.performance
 
+import android.os.Environment
+import android.os.StatFs
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xiiann.ledsync.data.executor.IRootExecutor
@@ -17,6 +20,9 @@ data class PerformanceMetrics(
     val cpuPct: Float = 0f,
     val ramUsedMb: Int = 0,
     val ramTotalMb: Int = 0,
+    val storageUsedGb: Float = 0f,
+    val storageTotalGb: Float = 0f,
+    val uptimeFormatted: String = "0h 0m",
     val batteryLevel: Int = 0,
     val isCharging: Boolean = false,
     val isWarming: Boolean = true
@@ -45,6 +51,8 @@ class PerformanceViewModel @Inject constructor(
         viewModelScope.launch {
             while (true) {
                 readProcStats()
+                readStorageStats()
+                readUptime()
                 val interval = if (warmTicks < 8) {
                     warmTicks++
                     500L
@@ -106,5 +114,33 @@ class PerformanceViewModel @Inject constructor(
                 ramTotalMb = total / 1024
             )
         }
+    }
+
+    private fun readStorageStats() {
+        try {
+            val path = Environment.getDataDirectory()
+            val stat = StatFs(path.path)
+            val blockSize = stat.blockSizeLong
+            val totalBytes = stat.blockCountLong * blockSize
+            val freeBytes = stat.availableBlocksLong * blockSize
+            val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0)
+
+            val totalGb = totalBytes / (1024f * 1024f * 1024f)
+            val usedGb = usedBytes / (1024f * 1024f * 1024f)
+
+            _metrics.value = _metrics.value.copy(
+                storageUsedGb = usedGb,
+                storageTotalGb = totalGb
+            )
+        } catch (_: Exception) {}
+    }
+
+    private fun readUptime() {
+        val millis = SystemClock.elapsedRealtime()
+        val hours = millis / (1000 * 60 * 60)
+        val mins = (millis / (1000 * 60)) % 60
+        _metrics.value = _metrics.value.copy(
+            uptimeFormatted = "${hours}h ${mins}m"
+        )
     }
 }
