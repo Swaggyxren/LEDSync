@@ -108,6 +108,13 @@ class HardwareRepository @Inject constructor(
         return ok
     }
 
+    suspend fun turnOffAudioReactive(): Boolean {
+        val cfg = activeConfig
+        val ok = rootExecutor.runSu("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}")
+        log("[${dateFormat.format(Date())}] AUDIO_MODE[OFF] -> ok=$ok", if (ok) LogLevel.INFO else LogLevel.ERROR)
+        return ok
+    }
+
     suspend fun sendRawHex(hex: String, tag: String = "RAW"): Boolean {
         if (!masterEnabled) return false
         ensureLedEnabled()
