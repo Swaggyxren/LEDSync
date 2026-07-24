@@ -50,6 +50,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.xiiann.ledsync.presentation.audioled.AudioLedScreen
+import com.xiiann.ledsync.presentation.audioled.AudioLedViewModel
 import com.xiiann.ledsync.presentation.battery.BatteryConfigScreen
 import com.xiiann.ledsync.presentation.battery.BatteryConfigViewModel
 import com.xiiann.ledsync.presentation.home.HomeScreen
@@ -68,6 +70,7 @@ sealed class SubDestination {
     data object AppAlerts : SubDestination()
     data object BatteryConfig : SubDestination()
     data object Performance : SubDestination()
+    data object AudioLed : SubDestination()
 }
 
 data class NavTab(
@@ -143,6 +146,13 @@ fun MainShell() {
                     onBack = { currentSubDestination = SubDestination.None }
                 )
             }
+            is SubDestination.AudioLed -> {
+                val viewModel: AudioLedViewModel = hiltViewModel()
+                AudioLedScreen(
+                    viewModel = viewModel,
+                    onBack = { currentSubDestination = SubDestination.None }
+                )
+            }
             is SubDestination.None -> {
                 Box(
                     modifier = Modifier
@@ -189,6 +199,9 @@ fun MainShell() {
                                     },
                                     onNavigateToBatteryConfig = {
                                         currentSubDestination = SubDestination.BatteryConfig
+                                    },
+                                    onNavigateToAudioLed = {
+                                        currentSubDestination = SubDestination.AudioLed
                                     }
                                 )
                             }
