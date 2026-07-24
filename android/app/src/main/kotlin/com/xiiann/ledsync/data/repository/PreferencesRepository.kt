@@ -50,6 +50,7 @@ class PreferencesRepository @Inject constructor(
         val KEY_SELECTED_DEVICE = stringPreferencesKey("selected_device_config")
         val KEY_SHOW_SYSTEM_APPS = booleanPreferencesKey("notif_show_system_apps")
         val KEY_TOOLTIP_SHOWN = booleanPreferencesKey("settings_tooltip_shown")
+        val KEY_AUDIO_LED_DYNAMIC = booleanPreferencesKey("audio_led_dynamic")
     }
 
     val notifHexMap: Flow<Map<String, String>> = dataStore.data.map { prefs ->
@@ -93,6 +94,10 @@ class PreferencesRepository @Inject constructor(
         prefs[KEY_TOOLTIP_SHOWN] ?: false
     }
 
+    val audioLedDynamic: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_AUDIO_LED_DYNAMIC] ?: false
+    }
+
     suspend fun saveNotifMappings(
         nameMap: Map<String, String>,
         hexMap: Map<String, String>,
@@ -133,6 +138,12 @@ class PreferencesRepository @Inject constructor(
     suspend fun setTooltipShown(shown: Boolean) {
         dataStore.edit { prefs ->
             prefs[KEY_TOOLTIP_SHOWN] = shown
+        }
+    }
+
+    suspend fun setAudioLedDynamic(dynamic: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AUDIO_LED_DYNAMIC] = dynamic
         }
     }
 }
