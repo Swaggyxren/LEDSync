@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,7 +38,8 @@ import com.xiiann.ledsync.presentation.theme.bounceClick
 @Composable
 fun TweaksScreen(
     onNavigateToAppAlerts: () -> Unit,
-    onNavigateToBatteryConfig: () -> Unit
+    onNavigateToBatteryConfig: () -> Unit,
+    onNavigateToAudioLed: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
 
@@ -91,6 +93,18 @@ fun TweaksScreen(
                 iconBg = cs.tertiaryContainer,
                 iconTint = cs.onTertiaryContainer,
                 onClick = onNavigateToBatteryConfig
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Audio Reactive LED Tile
+            AospTweakTile(
+                title = "Audio Reactive LED",
+                description = "Sync LED to audio — Static white or Dynamic RGB",
+                icon = Icons.Default.GraphicEq,
+                iconBg = cs.secondaryContainer,
+                iconTint = cs.onSecondaryContainer,
+                onClick = onNavigateToAudioLed
             )
 
             Spacer(modifier = Modifier.height(100.dp))
