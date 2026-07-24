@@ -21,13 +21,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    applicationVariants.all {
-        outputs.all {
-            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            output.outputFileName = "LEDSync-v${versionName}-${name}.apk"
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false

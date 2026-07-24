@@ -37,20 +37,18 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Build Release APK
-        run: cd android && ./gradlew assembleRelease --no-daemon
-
-      - name: Find Release APK
-        id: find_apk
         run: |
-          APK_FILE=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          echo "Found APK: $APK_FILE"
-          echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+          cd android && ./gradlew assembleRelease --no-daemon
+          RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -n "$RAW_APK" ] && [ -f "$RAW_APK" ]; then
+            cp "$RAW_APK" app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LEDSync-v2.0.1-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk
           if-no-files-found: error
 
       - name: Send Telegram Notification & APK
@@ -71,7 +69,7 @@ jobs:
           BRANCH_NAME="${GITHUB_REF_NAME:-unknown}"
           JOB_STATUS="${{ job.status }}"
 
-          APK_PATH="${{ steps.find_apk.outputs.apk_path }}"
+          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk"
 
           if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
             CAPTION="🚀 <b>LEDSync v2.0.1 Release Build Success</b>
