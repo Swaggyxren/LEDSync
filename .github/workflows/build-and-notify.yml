@@ -66,32 +66,28 @@ jobs:
           APK_PATH="android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk"
 
           if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
-            CAPTION=$(cat <<EOF
-🚀 <b>LEDSync v2.0.1 Release Build Success</b>
+            CAPTION="🚀 <b>LEDSync v2.0.1 Release Build Success</b>
 
 📌 <b>Commit:</b> <code>${SHORT_SHA}</code>
 📝 <b>Message:</b> ${COMMIT_MSG}
 👤 <b>Author:</b> ${COMMIT_AUTHOR}
-🌿 <b>Branch:</b> ${BRANCH_NAME}
-EOF
-)
+🌿 <b>Branch:</b> ${BRANCH_NAME}"
+
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
               -F document=@"${APK_PATH}" \
               -F caption="${CAPTION}" \
               -F parse_mode="HTML"
           else
-            CAPTION=$(cat <<EOF
-❌ <b>LEDSync Release Build Failed</b>
+            CAPTION="❌ <b>LEDSync Release Build Failed</b>
 
 📌 <b>Commit:</b> <code>${SHORT_SHA}</code>
 📝 <b>Message:</b> ${COMMIT_MSG}
 👤 <b>Author:</b> ${COMMIT_AUTHOR}
-🌿 <b>Branch:</b> ${BRANCH_NAME}
-EOF
-)
+🌿 <b>Branch:</b> ${BRANCH_NAME}"
+
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -d chat_id="${TELEGRAM_CHAT_ID}" \
-              -d text="${CAPTION}" \
-              -d parse_mode="HTML"
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F text="${CAPTION}" \
+              -F parse_mode="HTML"
           fi
