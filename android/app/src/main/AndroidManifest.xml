@@ -47,6 +47,18 @@
             </intent-filter>
         </service>
 
+        <!-- Quick Settings Tile Service for Audio Reactive LED -->
+        <service
+            android:name=".service.AudioLedTileService"
+            android:label="Audio LED"
+            android:icon="@mipmap/ic_launcher"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Restarts the notification listener after reboot or app update -->
         <receiver
             android:name=".service.BootReceiver"
