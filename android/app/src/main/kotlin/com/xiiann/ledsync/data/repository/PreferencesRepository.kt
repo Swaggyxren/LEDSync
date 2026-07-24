@@ -50,6 +50,7 @@ class PreferencesRepository @Inject constructor(
         val KEY_SELECTED_DEVICE = stringPreferencesKey("selected_device_config")
         val KEY_SHOW_SYSTEM_APPS = booleanPreferencesKey("notif_show_system_apps")
         val KEY_TOOLTIP_SHOWN = booleanPreferencesKey("settings_tooltip_shown")
+        val KEY_AUDIO_LED_ENABLED = booleanPreferencesKey("audio_led_enabled")
         val KEY_AUDIO_LED_DYNAMIC = booleanPreferencesKey("audio_led_dynamic")
     }
 
@@ -92,6 +93,10 @@ class PreferencesRepository @Inject constructor(
 
     val tooltipShown: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_TOOLTIP_SHOWN] ?: false
+    }
+
+    val audioLedEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_AUDIO_LED_ENABLED] ?: false
     }
 
     val audioLedDynamic: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -138,6 +143,12 @@ class PreferencesRepository @Inject constructor(
     suspend fun setTooltipShown(shown: Boolean) {
         dataStore.edit { prefs ->
             prefs[KEY_TOOLTIP_SHOWN] = shown
+        }
+    }
+
+    suspend fun setAudioLedEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AUDIO_LED_ENABLED] = enabled
         }
     }
 
