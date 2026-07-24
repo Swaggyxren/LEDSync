@@ -1,33 +1,48 @@
 # LEDSync
 
-LEDSync is a small Android + Flutter project that syncs your phone’s LED effects with **notifications** (and battery events, depending on your setup/device support).
+<p align="center">
+  <img src="assets/card_banner.png" alt="LEDSync Banner" width="480" />
+</p>
 
-> ⚠️ **Disclaimer / Credits**
-> This project was **mostly made with AI assistance**.  
-> I made this mainly because I was bored and wanted to experiment.  
-> Expect bugs, rough edges, and device-specific behavior.
+[![Android Release](https://img.shields.io/badge/Android-Release%20v2.0.1-brightgreen.svg)](https://github.com/Swaggyxren/LEDSync)
+[![Kotlin](https://img.shields.io/badge/Kotlin-100%25%20Native-blue.svg)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4.svg)](https://developer.android.com/jetpack/compose)
+[![Material Design 3](https://img.shields.io/badge/Design-M3%20Expressive-FF7043.svg)](https://m3.material.io/)
+
+Native Android application built with Kotlin, Jetpack Compose, and Hilt that interfaces directly with kernel sysfs LED hardware drivers (`/sys/class/leds/`).
 
 ---
 
 ## Features
 
-- ✅ **Notification LED Sync**
-  - Uses Android **Notification Listener** permission.
-  - Triggers the LED effect you assign per app/package (saved in Flutter SharedPreferences).
-- ✅ **LED Lab / Effects Menu**
-  - Manual testing / preview of effects.
-- ✅ **Root-based LED control**
-  - Writes to device LED nodes (sysfs) via `su`.
-- ✅ **Battery listener (optional)**
-  - Can trigger effects for low/critical/full battery depending on your implementation.
+- **Audio Reactive LED**: Real-time audio spectrum visualization and static white modes, featuring a Quick Settings tile.
+- **Notification LED Sync**: Per-app custom LED effect mapping with 24/7 background sync.
+- **Battery LED Studio**: Low, Critical, Charging, and Full battery LED triggers with discrete threshold sliders.
+- **Material 3 Expressive UI**: Physics spring animations, floating nav dock, and dynamic Light/Dark system theme support.
+- **Performance Monitor**: Real-time CPU sparkline chart, RAM allocation, storage capacity, and system uptime.
+- **Security & Reliability**: Root permission gate and notification listener access checks.
 
 ---
 
 ## Requirements
 
-- Android device with supported LED hardware + correct sysfs paths  
-- **Root access** (Magisk / KernelSU / etc.)
-- Notification access enabled:
-  - Settings → Special access → **Notification access** → enable for LEDSync
+- Android 8.0+ (API 26+)
+- Root access (Magisk, KernelSU, or APatch)
+- Notification Access enabled (Settings → Special app access → Notification access)
 
+---
 
+## Building from Source
+
+```bash
+git clone https://github.com/Swaggyxren/LEDSync.git
+cd LEDSync/android
+./gradlew assembleRelease
+```
+
+---
+
+## Author
+
+- **Developer**: Xi'annnnnn ([@kasajin001](https://github.com/Swaggyxren))
+- **License**: Open Source
