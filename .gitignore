@@ -8,7 +8,6 @@ build/
 *.iml
 
 # Android
-android/**/gradle-wrapper.jar
 android/.gradle/
 android/local.properties
 android/**/GeneratedPluginRegistrant.java

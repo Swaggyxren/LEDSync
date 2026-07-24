@@ -1,0 +1,82 @@
+name: Build Android APK & Telegram Notify
+
+on:
+  push:
+    branches:
+      - main
+      - native-kotlin-rewrite
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Notify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Accept Android SDK Licenses
+        run: |
+          mkdir -p "$ANDROID_HOME/licenses" || true
+          echo -e "89339e075775f199293ccf97f9e29ad701ac1e5d\n7a9331941639fede0e88f335250d36742e7bfe7c\n24333f8a6378b6e4d16d4f6f9e51626c68d67555\nd56f5187479451eabf01fb78af6dfcb131a6481e\ne984671924535cd86243142109477d1091c43010" > "$ANDROID_HOME/licenses/android-sdk-license"
+          echo -e "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LEDSync-v2.0.1-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Send Telegram Notification & APK
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram bot token or chat ID secret is not set. Skipping Telegram notification."
+            exit 0
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/"/\\"/g')
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
+          BRANCH_NAME="${GITHUB_REF_NAME:-unknown}"
+          JOB_STATUS="${{ job.status }}"
+
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+
+          if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
+            CAPTION="🚀 <b>LEDSync v2.0.1 Release Build Success</b>%0A%0A📌 <b>Commit:</b> <code>${SHORT_SHA}</code>%0A📝 <b>Message:</b> ${COMMIT_MSG}%0A👤 <b>Author:</b> ${COMMIT_AUTHOR}%0A🌿 <b>Branch:</b> ${BRANCH_NAME}"
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"${APK_PATH}" \
+              -F caption="${CAPTION}" \
+              -F parse_mode="HTML"
+          else
+            CAPTION="❌ <b>LEDSync Release Build Failed</b>%0A%0A📌 <b>Commit:</b> <code>${SHORT_SHA}</code>%0A📝 <b>Message:</b> ${COMMIT_MSG}%0A👤 <b>Author:</b> ${COMMIT_AUTHOR}%0A🌿 <b>Branch:</b> ${BRANCH_NAME}"
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="${CAPTION}" \
+              -d parse_mode="HTML"
+          fi
