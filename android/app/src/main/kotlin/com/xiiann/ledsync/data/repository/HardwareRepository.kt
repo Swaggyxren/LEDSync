@@ -1,6 +1,7 @@
 package com.xiiann.ledsync.data.repository
 
 import com.xiiann.ledsync.data.executor.IRootExecutor
+import com.xiiann.ledsync.domain.model.AudioLedMode
 import com.xiiann.ledsync.domain.model.DeviceConfig
 import com.xiiann.ledsync.domain.model.LH8nConfig
 import kotlinx.coroutines.delay
@@ -94,6 +95,16 @@ class HardwareRepository @Inject constructor(
         if (ok) {
             isLightActive = true
         }
+        return ok
+    }
+
+    suspend fun setAudioReactiveMode(mode: AudioLedMode): Boolean {
+        ensureLedEnabled()
+        val cfg = activeConfig
+        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
+                "echo -n '${mode.hex}' > ${cfg.lbCmd}"
+        val ok = rootExecutor.runSu(cmd)
+        log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
