@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.xiiann.ledsync.data.repository.RootState
 import com.xiiann.ledsync.presentation.audioled.AudioLedScreen
 import com.xiiann.ledsync.presentation.audioled.AudioLedViewModel
 import com.xiiann.ledsync.presentation.battery.BatteryConfigScreen
@@ -97,7 +98,7 @@ data class NavTab(
 fun MainShell(
     mainViewModel: MainViewModel = hiltViewModel()
 ) {
-    val isReady by mainViewModel.isReady.collectAsState()
+    val rootState by mainViewModel.rootState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentSubDestination by remember { mutableStateOf<SubDestination>(SubDestination.None) }
 
@@ -124,7 +125,7 @@ fun MainShell(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (!isReady) Modifier.blur(16.dp) else Modifier)
+                .then(if (rootState == RootState.DENIED) Modifier.blur(16.dp) else Modifier)
         ) {
             AnimatedContent(
                 targetState = currentSubDestination,
@@ -250,7 +251,7 @@ fun MainShell(
                                 Box(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 ) {
-                                    // Sliding Pill Active Indicator (uses offset to gracefully support spring bouncy overshoot)
+                                    // Sliding Pill Active Indicator
                                     Box(
                                         modifier = Modifier
                                             .offset(x = indicatorOffset)
@@ -322,8 +323,8 @@ fun MainShell(
             }
         }
 
-        // Root Permission Gate Dialog Overlay when Superuser access is not ready
-        if (!isReady) {
+        // Root Permission Gate Dialog Overlay rendered ONLY when root check explicitly fails (RootState.DENIED)
+        if (rootState == RootState.DENIED) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

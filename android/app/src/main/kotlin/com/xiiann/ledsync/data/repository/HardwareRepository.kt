@@ -16,6 +16,8 @@ import javax.inject.Singleton
 
 enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
 
+enum class RootState { IDLE, CHECKING, GRANTED, DENIED }
+
 data class LogEntry(
     val timestamp: String,
     val message: String,
@@ -33,6 +35,9 @@ class HardwareRepository @Inject constructor(
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+
+    private val _rootState = MutableStateFlow(RootState.IDLE)
+    val rootState: StateFlow<RootState> = _rootState.asStateFlow()
 
     private val _actionLogs = MutableStateFlow<List<LogEntry>>(emptyList())
     val actionLogs: StateFlow<List<LogEntry>> = _actionLogs.asStateFlow()
@@ -64,10 +69,12 @@ class HardwareRepository @Inject constructor(
 
     suspend fun initializeHardware(force: Boolean = true): Boolean {
         log("[${dateFormat.format(Date())}] Initializing hardware components...")
+        _rootState.value = RootState.CHECKING
         val rooted = rootExecutor.isRooted()
         if (!rooted) {
             log("[${dateFormat.format(Date())}] CRITICAL: No Root Access.", LogLevel.ERROR)
             _isReady.value = false
+            _rootState.value = RootState.DENIED
             return false
         }
         val ok = ensureLedEnabled(force = force)
@@ -76,9 +83,11 @@ class HardwareRepository @Inject constructor(
             log("[${dateFormat.format(Date())}] LED Controller: Active", LogLevel.SUCCESS)
             log("[${dateFormat.format(Date())}] System Ready. Awaiting effect selection.", LogLevel.SUCCESS)
             _isReady.value = true
+            _rootState.value = RootState.GRANTED
         } else {
             log("[${dateFormat.format(Date())}] Hardware init failed", LogLevel.ERROR)
             _isReady.value = false
+            _rootState.value = RootState.DENIED
         }
         return ok
     }

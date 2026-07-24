@@ -3,6 +3,7 @@ package com.xiiann.ledsync.presentation.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xiiann.ledsync.data.repository.HardwareRepository
+import com.xiiann.ledsync.data.repository.RootState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -14,6 +15,7 @@ class MainViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isReady: StateFlow<Boolean> = hardwareRepository.isReady
+    val rootState: StateFlow<RootState> = hardwareRepository.rootState
 
     init {
         viewModelScope.launch {
