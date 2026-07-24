@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - native-kotlin-rewrite
   workflow_dispatch:
 
 jobs:
