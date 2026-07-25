@@ -70,7 +70,7 @@ class HardwareRepository @Inject constructor(
     suspend fun initializeHardware(force: Boolean = true): Boolean {
         log("[${dateFormat.format(Date())}] Initializing hardware components...")
         _rootState.value = RootState.CHECKING
-        val rooted = rootExecutor.isRooted()
+        val rooted = rootExecutor.isRooted(forceRecheck = force)
         if (!rooted) {
             log("[${dateFormat.format(Date())}] CRITICAL: No Root Access.", LogLevel.ERROR)
             _isReady.value = false
@@ -100,7 +100,7 @@ class HardwareRepository @Inject constructor(
                 "echo 255 > ${cfg.awPath}/brightness; " +
                 "echo none > ${cfg.awPath}/trigger 2>/dev/null || true; " +
                 "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSu(cmd)
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         if (ok) {
             isLightActive = true
         }
@@ -112,14 +112,14 @@ class HardwareRepository @Inject constructor(
         val cfg = activeConfig
         val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
                 "echo -n '${mode.hex}' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSu(cmd)
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
     suspend fun turnOffAudioReactive(): Boolean {
         val cfg = activeConfig
-        val ok = rootExecutor.runSu("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}")
+        val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[OFF] -> ok=$ok", if (ok) LogLevel.INFO else LogLevel.ERROR)
         return ok
     }
@@ -128,7 +128,7 @@ class HardwareRepository @Inject constructor(
         if (!masterEnabled) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val ok = rootExecutor.runSu("echo -n '$hex' > ${cfg.lbCmd}")
+        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
@@ -137,21 +137,21 @@ class HardwareRepository @Inject constructor(
         if (!masterEnabled) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val ok = rootExecutor.runSu("echo -n '$hex' > ${cfg.lbCmd}")
+        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
     suspend fun fireStop(hex: String = activeConfig.turnOffHex, tag: String = "STOP"): Boolean {
         val cfg = activeConfig
-        val ok = rootExecutor.runSu("echo -n '$hex' > ${cfg.lbCmd}")
+        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.INFO else LogLevel.ERROR)
         return ok
     }
 
     suspend fun turnOffAll(): Boolean {
         val cfg = activeConfig
-        val ok = rootExecutor.runSu("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}")
+        val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         isLightActive = false
         log("[${dateFormat.format(Date())}] Soft turn-off executed", LogLevel.INFO)
         return ok
@@ -173,5 +173,11 @@ class HardwareRepository @Inject constructor(
 
     fun markLedInactive() {
         isLightActive = false
+    }
+
+    suspend fun recheckRootStatus(): Boolean {
+        val ok = rootExecutor.isRooted(forceRecheck = true)
+        _rootState.value = if (ok) RootState.GRANTED else RootState.DENIED
+        return ok
     }
 }

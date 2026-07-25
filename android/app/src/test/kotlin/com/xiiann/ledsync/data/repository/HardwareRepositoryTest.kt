@@ -22,9 +22,15 @@ class HardwareRepositoryTest {
             return true
         }
 
-        override suspend fun isRooted(): Boolean = rootStatus
+        override suspend fun runSuWithRetry(cmd: String, maxRetries: Int, delayMs: Long): Boolean {
+            return runSu(cmd)
+        }
+
+        override suspend fun isRooted(forceRecheck: Boolean): Boolean = rootStatus
 
         override suspend fun runSuOutput(cmd: String): String = ""
+
+        override fun closeShell() {}
     }
 
     private lateinit var mockExecutor: MockRootExecutor

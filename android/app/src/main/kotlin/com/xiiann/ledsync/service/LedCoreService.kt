@@ -9,6 +9,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -50,6 +52,8 @@ class LedCoreService : NotificationListenerService() {
 
     private val lastTriggerPerPkg = HashMap<String, Long>()
     private val activeLoopingPkgs = mutableSetOf<String>()
+
+    private var batteryReceiverRegistered = false
 
     // Battery state tracking
     private var inLow = false
@@ -90,26 +94,37 @@ class LedCoreService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.d("LedCoreService", "Listener CONNECTED ✅")
-        startForeground(FG_NOTIF_ID, buildNotification(), 0x00000001)
+        startForeground(FG_NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        registerReceiver(batteryReceiver, filter)
+        if (!batteryReceiverRegistered) {
+            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            registerReceiver(batteryReceiver, filter)
+            batteryReceiverRegistered = true
+        }
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.d("LedCoreService", "Listener DISCONNECTED ❌ — requesting rebind")
-        try {
-            unregisterReceiver(batteryReceiver)
-        } catch (_: Exception) {}
+        if (batteryReceiverRegistered) {
+            try {
+                unregisterReceiver(batteryReceiver)
+            } catch (_: Exception) {}
+            batteryReceiverRegistered = false
+        }
         requestRebind(ComponentName(this, LedCoreService::class.java))
     }
 
     override fun onDestroy() {
         stopForeground(STOP_FOREGROUND_REMOVE)
-        try {
-            unregisterReceiver(batteryReceiver)
-        } catch (_: Exception) {}
+        handler.removeCallbacksAndMessages(null)
+        serviceScope.cancel()
+        if (batteryReceiverRegistered) {
+            try {
+                unregisterReceiver(batteryReceiver)
+            } catch (_: Exception) {}
+            batteryReceiverRegistered = false
+        }
         super.onDestroy()
     }
 
