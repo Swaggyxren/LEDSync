@@ -140,7 +140,7 @@ fun PerformanceScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // 2. Memory Allocation Card (Clean height without empty space)
+                // 2. Memory Allocation Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -290,7 +290,7 @@ fun PerformanceScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             AospStatChip(label = "SYSFS LED", value = "Active", color = cs.secondary, modifier = Modifier.weight(1f))
                             Spacer(modifier = Modifier.width(8.dp))
-                            AospStatChip(label = "KERNEL", value = "Linux", color = cs.onSurface, modifier = Modifier.weight(1f))
+                            AospStatChip(label = "KERNEL", value = metrics.kernelVersion, color = cs.onSurface, modifier = Modifier.weight(1f))
                         }
                     }
                 }

@@ -23,6 +23,7 @@ data class PerformanceMetrics(
     val storageUsedGb: Float = 0f,
     val storageTotalGb: Float = 0f,
     val uptimeFormatted: String = "0h 0m",
+    val kernelVersion: String = "5.10",
     val batteryLevel: Int = 0,
     val isCharging: Boolean = false,
     val isWarming: Boolean = true
@@ -53,6 +54,7 @@ class PerformanceViewModel @Inject constructor(
                 readProcStats()
                 readStorageStats()
                 readUptime()
+                readKernelVersion()
                 val interval = if (warmTicks < 8) {
                     warmTicks++
                     500L
@@ -142,5 +144,23 @@ class PerformanceViewModel @Inject constructor(
         _metrics.value = _metrics.value.copy(
             uptimeFormatted = "${hours}h ${mins}m"
         )
+    }
+
+    private fun readKernelVersion() {
+        try {
+            val raw = System.getProperty("os.version") ?: ""
+            val parsed = parseKernelVersion(raw)
+            _metrics.value = _metrics.value.copy(kernelVersion = parsed)
+        } catch (_: Exception) {
+            _metrics.value = _metrics.value.copy(kernelVersion = "5.10")
+        }
+    }
+
+    companion object {
+        fun parseKernelVersion(rawVersion: String): String {
+            if (rawVersion.isBlank()) return "Unknown"
+            val match = Regex("""(\d+\.\d+\.\d+)""").find(rawVersion)
+            return match?.groupValues?.get(1) ?: rawVersion.take(12)
+        }
     }
 }
