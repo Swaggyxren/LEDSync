@@ -54,6 +54,7 @@ firmware itself uses, reverse-engineered from the decompiled `transsion-light-se
 
 ## Requirements
 
+- **Device: TECNO POVA 5 PRO 5G (LH8n)** — hardcoded to this device's LightBelt (aw22xxx) sysfs nodes; will not control LEDs on other hardware.
 - Android 8.0+ (API 26+)
 - Root access (Magisk, KernelSU, or APatch)
 - Notification Access enabled (Settings → Special app access → Notification access)
