@@ -300,27 +300,25 @@ class LedCoreService : NotificationListenerService() {
         val nowLow = level <= config.lowThreshold && !nowCrit
         val nowFull = charging && level >= config.fullThreshold
 
-        // Exit hysteresis
+        // Exit hysteresis -- always release ownership/turn off here regardless
+        // of whether the effect loops on hardware: a pulse-trained one-shot
+        // pattern has nothing left to actively turn off, but LED ownership
+        // still needs releasing so music mode can resume, and sending the
+        // off command to an already-idle chip is harmless either way.
         if (inCritical && level >= config.criticalThreshold + hysteresis) {
             inCritical = false
             cancelBatteryJobs()
-            if (deviceConfig.loopingPatterns.contains(config.criticalEffectName)) {
-                hardwareRepository.turnOffAll()
-            }
+            hardwareRepository.turnOffAll()
         }
         if (inLow && level >= config.lowThreshold + hysteresis) {
             inLow = false
             cancelBatteryJobs()
-            if (deviceConfig.loopingPatterns.contains(config.lowEffectName)) {
-                hardwareRepository.turnOffAll()
-            }
+            hardwareRepository.turnOffAll()
         }
         if (inFull && (!charging || level <= config.fullThreshold - hysteresis)) {
             inFull = false
             cancelBatteryJobs()
-            if (deviceConfig.loopingPatterns.contains(config.fullEffectName)) {
-                hardwareRepository.turnOffAll()
-            }
+            hardwareRepository.turnOffAll()
         }
 
         // Threshold entry
@@ -382,6 +380,11 @@ class LedCoreService : NotificationListenerService() {
                 playBatteryEffect(effectName)
                 remaining--
             }
+            // Fixed-count train finished but the battery condition may still
+            // be active (hysteresis-exit might never fire) -- release
+            // ownership now so music mode can resume rather than staying
+            // silently blocked long after the LED itself has gone dark.
+            hardwareRepository.releaseAndRestore(LedOwner.BATTERY)
         }
     }
 
