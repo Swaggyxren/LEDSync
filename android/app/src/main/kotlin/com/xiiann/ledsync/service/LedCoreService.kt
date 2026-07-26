@@ -20,6 +20,7 @@ import android.util.Log
 import com.xiiann.ledsync.R
 import com.xiiann.ledsync.data.repository.BatteryConfig
 import com.xiiann.ledsync.data.repository.HardwareRepository
+import com.xiiann.ledsync.data.repository.LedOwner
 import com.xiiann.ledsync.data.repository.PreferencesRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -226,6 +227,7 @@ class LedCoreService : NotificationListenerService() {
                     synchronized(lastTriggerPerPkg) {
                         lastTriggerPerPkg[pkg] = System.currentTimeMillis()
                     }
+                    hardwareRepository.releaseAndRestore(LedOwner.NOTIFICATION)
                 } else {
                     handler.postDelayed({
                         val stillActive = synchronized(activeLoopingPkgs) { activeLoopingPkgs.contains(pkg) }
@@ -315,7 +317,7 @@ class LedCoreService : NotificationListenerService() {
     private suspend fun playBatteryEffect(effectName: String) {
         val deviceConfig = hardwareRepository.getConfig()
         val hex = deviceConfig.ledEffects[effectName] ?: return
-        hardwareRepository.sendRawHex(hex, "BATT[$effectName]")
+        hardwareRepository.sendRawHex(hex, "BATT[$effectName]", owner = LedOwner.BATTERY)
     }
 
     private fun startBatteryLoopStopTimer() {

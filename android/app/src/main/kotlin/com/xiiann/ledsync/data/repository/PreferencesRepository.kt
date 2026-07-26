@@ -40,6 +40,7 @@ class PreferencesRepository @Inject constructor(
         val KEY_NOTIF_NAME_MAP = stringPreferencesKey("notif_name_map")
         val KEY_LOOPING_PKGS = stringSetPreferencesKey("notif_looping_pkgs")
         val KEY_TURN_OFF_HEX = stringPreferencesKey("notif_turnoff_hex")
+        val KEY_NOTIF_DEFAULTS_SEEDED = booleanPreferencesKey("notif_defaults_seeded")
 
         val KEY_BATT_LOW_EFFECT = stringPreferencesKey("batt_low_effect_name")
         val KEY_BATT_CRIT_EFFECT = stringPreferencesKey("batt_critical_effect_name")
@@ -72,6 +73,16 @@ class PreferencesRepository @Inject constructor(
 
     val turnOffHex: Flow<String> = dataStore.data.map { prefs ->
         prefs[KEY_TURN_OFF_HEX] ?: "00 01 00 00 00 00"
+    }
+
+    val notifDefaultsSeeded: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_NOTIF_DEFAULTS_SEEDED] ?: false
+    }
+
+    suspend fun setNotifDefaultsSeeded(seeded: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_NOTIF_DEFAULTS_SEEDED] = seeded
+        }
     }
 
     val batteryConfig: Flow<BatteryConfig> = dataStore.data.map { prefs ->

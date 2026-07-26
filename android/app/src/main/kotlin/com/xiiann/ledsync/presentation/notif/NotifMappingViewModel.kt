@@ -6,6 +6,7 @@ import com.xiiann.ledsync.data.repository.HardwareRepository
 import com.xiiann.ledsync.data.repository.PreferencesRepository
 import com.xiiann.ledsync.data.source.AppInfoModel
 import com.xiiann.ledsync.data.source.AppListSource
+import com.xiiann.ledsync.domain.model.NotifDefaults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,11 +53,50 @@ class NotifMappingViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             val showSys = showSystemApps.first()
-            val saved = preferencesRepository.notifNameMap.first()
+            var saved = preferencesRepository.notifNameMap.first()
+            val apps = appListSource.getInstalledApps(showSys)
+
+            // One-time seed of reference default mappings, gated on the
+            // package actually being installed -- never re-applied after
+            // this first run, so a mapping the user deliberately clears
+            // later doesn't silently come back.
+            val alreadySeeded = preferencesRepository.notifDefaultsSeeded.first()
+            if (!alreadySeeded) {
+                // Independent of the show-system-apps toggle -- some OEM
+                // builds flag preinstalled Chrome/Gmail as system apps, and
+                // seeding shouldn't silently skip them based on whatever
+                // that toggle happens to be set to on first launch.
+                val installedPkgs = appListSource.getInstalledApps(includeSystemApps = true)
+                    .map { it.packageName }.toSet()
+                val seeded = saved.toMutableMap()
+                var changed = false
+                NotifDefaults.PACKAGE_TO_EFFECT.forEach { (pkg, effect) ->
+                    if (pkg in installedPkgs && pkg !in seeded) {
+                        seeded[pkg] = effect
+                        changed = true
+                    }
+                }
+                preferencesRepository.setNotifDefaultsSeeded(true)
+                if (changed) {
+                    val cfg = hardwareRepository.getConfig()
+                    val hexMap = mutableMapOf<String, String>()
+                    val loopingPkgs = mutableSetOf<String>()
+                    for ((pkg, effectName) in seeded) {
+                        cfg.ledEffects[effectName]?.let { hexMap[pkg] = it }
+                        if (cfg.loopingPatterns.contains(effectName)) loopingPkgs.add(pkg)
+                    }
+                    preferencesRepository.saveNotifMappings(
+                        nameMap = seeded,
+                        hexMap = hexMap,
+                        loopingPkgs = loopingPkgs,
+                        turnOffHexValue = cfg.turnOffHex ?: ""
+                    )
+                    saved = seeded
+                }
+            }
 
             _savedMap.value = saved
             _workingMap.value = saved
-            val apps = appListSource.getInstalledApps(showSys)
 
             if (isFirstLaunch) {
                 delay(5000L)
