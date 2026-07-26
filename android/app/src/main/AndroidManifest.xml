@@ -17,6 +17,9 @@
     <!-- Query installed applications for App LED Sync -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
+    <!-- Incoming/active call state, for phone-call LED -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
     <application
         android:name=".LedApp"
         android:label="LEDSync"

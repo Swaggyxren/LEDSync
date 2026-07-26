@@ -1,5 +1,6 @@
 package com.xiiann.ledsync.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +10,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Handler
@@ -16,7 +18,10 @@ import android.os.Looper
 import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.xiiann.ledsync.R
 import com.xiiann.ledsync.data.repository.BatteryConfig
 import com.xiiann.ledsync.data.repository.HardwareRepository
@@ -55,6 +60,9 @@ class LedCoreService : NotificationListenerService() {
     private val activeLoopingPkgs = mutableSetOf<String>()
 
     private var batteryReceiverRegistered = false
+
+    private var telephonyManager: TelephonyManager? = null
+    private var phoneStateListener: PhoneStateListener? = null
 
     // Battery state tracking
     private var inLow = false
@@ -102,6 +110,8 @@ class LedCoreService : NotificationListenerService() {
             registerReceiver(batteryReceiver, filter)
             batteryReceiverRegistered = true
         }
+
+        registerPhoneCallListener()
     }
 
     override fun onListenerDisconnected() {
@@ -113,6 +123,7 @@ class LedCoreService : NotificationListenerService() {
             } catch (_: Exception) {}
             batteryReceiverRegistered = false
         }
+        unregisterPhoneCallListener()
         requestRebind(ComponentName(this, LedCoreService::class.java))
     }
 
@@ -126,7 +137,41 @@ class LedCoreService : NotificationListenerService() {
             } catch (_: Exception) {}
             batteryReceiverRegistered = false
         }
+        unregisterPhoneCallListener()
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun registerPhoneCallListener() {
+        if (phoneStateListener != null) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w("LedCoreService", "READ_PHONE_STATE not granted -- skipping call LED")
+            return
+        }
+        val tm = getSystemService(TelephonyManager::class.java) ?: return
+        val listener = object : PhoneStateListener() {
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                serviceScope.launch {
+                    when (state) {
+                        TelephonyManager.CALL_STATE_RINGING -> hardwareRepository.ringPhoneCall()
+                        TelephonyManager.CALL_STATE_OFFHOOK,
+                        TelephonyManager.CALL_STATE_IDLE -> hardwareRepository.endPhoneCall()
+                    }
+                }
+            }
+        }
+        tm.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
+        telephonyManager = tm
+        phoneStateListener = listener
+    }
+
+    @Suppress("DEPRECATION")
+    private fun unregisterPhoneCallListener() {
+        phoneStateListener?.let { telephonyManager?.listen(it, PhoneStateListener.LISTEN_NONE) }
+        phoneStateListener = null
+        telephonyManager = null
     }
 
     private fun createNotificationChannel() {

@@ -226,6 +226,17 @@ class HardwareRepository @Inject constructor(
         return ok
     }
 
+    /** Incoming call started ringing -- takes NOTIFICATION priority so it
+     *  interrupts ambient music/battery effects, same as stock. No timer:
+     *  stays lit until [endPhoneCall] is called on answer or hangup. */
+    suspend fun ringPhoneCall(): Boolean =
+        fireEffect(activeConfig.phoneCallHex, "CALL_RINGING", owner = LedOwner.NOTIFICATION)
+
+    /** Call answered or ended -- stops the ring flash and hands control
+     *  back to music mode if it was playing before the call interrupted it. */
+    suspend fun endPhoneCall(): Boolean =
+        fireStop(activeConfig.turnOffHex, "CALL_END", owner = LedOwner.NOTIFICATION)
+
     suspend fun turnOffAll(owner: LedOwner = LedOwner.BATTERY): Boolean {
         val cfg = activeConfig
         val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
