@@ -74,6 +74,13 @@ class LedCoreService : NotificationListenerService() {
     private var fullJob: Job? = null
     private var batteryLoopStopJob: Job? = null
 
+    // Plug-in charge-tier flash (native parity) -- null until the first
+    // battery broadcast, so app startup while already charging never counts
+    // as a "just plugged in" transition.
+    private var lastChargingState: Boolean? = null
+    private var hasFlashedFullThisSession = false
+    private var chargeTierJob: Job? = null
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
@@ -293,6 +300,27 @@ class LedCoreService : NotificationListenerService() {
 
     private suspend fun handleBatteryChanged(level: Int, charging: Boolean) {
         if (!hardwareRepository.masterEnabled) return
+
+        // Plug-in charge-tier flash -- native parity: fires once on the
+        // charging transition regardless of the low/critical/full logic
+        // below, so both can legitimately fire back-to-back (e.g. plugging
+        // in at 15% shows the tier-1 flash immediately followed by the
+        // Critical effect), same as stock behaves.
+        val wasCharging = lastChargingState
+        if (charging && wasCharging == false) {
+            hasFlashedFullThisSession = false
+            fireChargeTierFlash(level)
+        } else if (!charging && wasCharging == true) {
+            chargeTierJob?.cancel()
+            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_UNPLUG", owner = LedOwner.NOTIFICATION)
+            hasFlashedFullThisSession = false
+        }
+        if (charging && level >= 100 && !hasFlashedFullThisSession) {
+            hasFlashedFullThisSession = true
+            fireChargeTierFlash(level)
+        }
+        lastChargingState = charging
+
         val config: BatteryConfig = preferencesRepository.batteryConfig.first()
         val deviceConfig = hardwareRepository.getConfig()
 
@@ -354,6 +382,24 @@ class LedCoreService : NotificationListenerService() {
                 startFullPulseTrain(config.fullEffectName)
             }
             return
+        }
+    }
+
+    /** Reverse-engineered from stock's hookChargeLed: 3 tiers by current
+     *  level, breakpoint at 20/60 (not 50) -- 60-99% and reaching 100%
+     *  while charging both reuse the same tier-3 hex, exactly like stock. */
+    private fun chargeTierHex(level: Int): String = when {
+        level < 20 -> "00 02 00 00 00 00"
+        level < 60 -> "00 02 01 00 00 00"
+        else -> "00 02 02 00 00 00"
+    }
+
+    private fun fireChargeTierFlash(level: Int) {
+        chargeTierJob?.cancel()
+        chargeTierJob = serviceScope.launch {
+            hardwareRepository.fireEffect(chargeTierHex(level), "CHARGE_TIER[$level%]", owner = LedOwner.NOTIFICATION)
+            delay(3000L)
+            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_CLEAR", owner = LedOwner.NOTIFICATION)
         }
     }
 
