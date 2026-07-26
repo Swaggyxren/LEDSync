@@ -1,6 +1,7 @@
 package com.xiiann.ledsync.data.repository
 
 import com.xiiann.ledsync.data.executor.IRootExecutor
+import com.xiiann.ledsync.domain.model.AudioGain
 import com.xiiann.ledsync.domain.model.AudioLedMode
 import com.xiiann.ledsync.domain.model.DeviceConfig
 import com.xiiann.ledsync.domain.model.LH8nConfig
@@ -107,13 +108,28 @@ class HardwareRepository @Inject constructor(
         return ok
     }
 
-    suspend fun setAudioReactiveMode(mode: AudioLedMode): Boolean {
+    suspend fun setAudioReactiveMode(mode: AudioLedMode, gainLevel: Int = AudioGain.DEFAULT_LEVEL): Boolean {
         ensureLedEnabled()
         val cfg = activeConfig
         val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
                 "echo -n '${mode.hex}' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
+        if (ok) {
+            // Stock service always follows the trigger with a gain command
+            // ~100ms later -- without it the chip is left at whatever its
+            // internal default gain is, which reads as "too sensitive".
+            delay(100L)
+            setAudioGain(gainLevel)
+        }
+        return ok
+    }
+
+    suspend fun setAudioGain(level: Int): Boolean {
+        val cfg = activeConfig
+        val cmd = AudioGain.command(level)
+        val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        log("[${dateFormat.format(Date())}] AUDIO_GAIN[level=$level] -> ok=$ok hex='$cmd'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 

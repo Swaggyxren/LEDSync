@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.xiiann.ledsync.domain.model.AudioGain
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -52,6 +53,7 @@ class PreferencesRepository @Inject constructor(
         val KEY_TOOLTIP_SHOWN = booleanPreferencesKey("settings_tooltip_shown")
         val KEY_AUDIO_LED_ENABLED = booleanPreferencesKey("audio_led_enabled")
         val KEY_AUDIO_LED_DYNAMIC = booleanPreferencesKey("audio_led_dynamic")
+        val KEY_AUDIO_LED_GAIN = intPreferencesKey("audio_led_gain")
     }
 
     val notifHexMap: Flow<Map<String, String>> = dataStore.data.map { prefs ->
@@ -101,6 +103,11 @@ class PreferencesRepository @Inject constructor(
 
     val audioLedDynamic: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_AUDIO_LED_DYNAMIC] ?: false
+    }
+
+    val audioLedGain: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_AUDIO_LED_GAIN] ?: AudioGain.DEFAULT_LEVEL)
+            .coerceIn(AudioGain.MIN_LEVEL, AudioGain.MAX_LEVEL)
     }
 
     suspend fun saveNotifMappings(
@@ -155,6 +162,12 @@ class PreferencesRepository @Inject constructor(
     suspend fun setAudioLedDynamic(dynamic: Boolean) {
         dataStore.edit { prefs ->
             prefs[KEY_AUDIO_LED_DYNAMIC] = dynamic
+        }
+    }
+
+    suspend fun setAudioLedGain(level: Int) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AUDIO_LED_GAIN] = level
         }
     }
 }
