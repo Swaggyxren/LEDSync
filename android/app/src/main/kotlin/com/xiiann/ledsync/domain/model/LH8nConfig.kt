@@ -21,20 +21,13 @@ class LH8nConfig : DeviceConfig {
         "Charged" to "00 02 02 00 00 00"
     )
 
+    // Confirmed by live testing on hardware -- everything else is one-shot.
     override val loopingPatterns: Set<String> = setOf(
         "Soft",
         "Speed",
         "Illusion",
-        "Pureness",
-        "StarRiver",
-        "Halo",
-        "Lightning",
-        "Rise",
         "Breathe",
-        "Party",
-        "Low Battery",
-        "Charging",
-        "Charged"
+        "Party"
     )
 
     override val defaultLowEffect: String = "Rise"
