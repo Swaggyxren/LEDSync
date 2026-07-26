@@ -47,24 +47,31 @@ jobs:
             echo "RELEASE_KEYSTORE_BASE64 secret not set. Falling back to debug signing."
           fi
 
+      - name: Extract App Version
+        id: appver
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Build Release APK
         env:
           RELEASE_KEYSTORE_PATH: ledsync-release.keystore
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          APP_VERSION: ${{ steps.appver.outputs.name }}
         run: |
           cd android && ./gradlew assembleRelease --no-daemon
           RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -n "$RAW_APK" ] && [ -f "$RAW_APK" ]; then
-            cp "$RAW_APK" app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk
+            cp "$RAW_APK" "app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-release.apk"
           fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LEDSync-v2.0.1-release-apk
-          path: android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk
+          name: LEDSync-v${{ steps.appver.outputs.name }}-release-apk
+          path: android/app/build/outputs/apk/release/LEDSync-v${{ steps.appver.outputs.name }}-release.apk
           if-no-files-found: error
 
       - name: Send Telegram Notification & APK
@@ -72,6 +79,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APP_VERSION: ${{ steps.appver.outputs.name }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Telegram bot token or chat ID secret is not set. Skipping Telegram notification."
@@ -85,10 +93,10 @@ jobs:
           BRANCH_NAME="${GITHUB_REF_NAME:-unknown}"
           JOB_STATUS="${{ job.status }}"
 
-          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v2.0.1-release.apk"
+          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-release.apk"
 
           if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
-            CAPTION=$(printf "🚀 <b>LEDSync v2.0.1 Release Build Success</b>\n\n📌 <b>Commit:</b> <code>%s</code>\n📝 <b>Message:</b> %s\n👤 <b>Author:</b> %s\n🌿 <b>Branch:</b> %s" "$SHORT_SHA" "$CLEAN_COMMIT_MSG" "$COMMIT_AUTHOR" "$BRANCH_NAME")
+            CAPTION=$(printf "🚀 <b>LEDSync v%s Release Build Success</b>\n\n📌 <b>Commit:</b> <code>%s</code>\n📝 <b>Message:</b> %s\n👤 <b>Author:</b> %s\n🌿 <b>Branch:</b> %s" "$APP_VERSION" "$SHORT_SHA" "$CLEAN_COMMIT_MSG" "$COMMIT_AUTHOR" "$BRANCH_NAME")
 
             RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
