@@ -285,11 +285,15 @@ fun AudioLedScreen(
                             )
                         }
 
+                        Spacer(modifier = Modifier.width(12.dp))
+
                         Text(
                             text = sliderPosition.toInt().toString(),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = cs.primary
+                            color = cs.primary,
+                            modifier = Modifier.width(20.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End
                         )
                     }
 
