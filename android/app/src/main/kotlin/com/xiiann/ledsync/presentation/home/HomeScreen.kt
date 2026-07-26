@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.xiiann.ledsync.BuildConfig
 import com.xiiann.ledsync.R
 import com.xiiann.ledsync.presentation.theme.bounceClick
 
@@ -175,7 +176,7 @@ fun HomeScreen(
                     color = cs.outline
                 )
                 Text(
-                    text = "v2.0.1",
+                    text = "v${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = cs.primary
