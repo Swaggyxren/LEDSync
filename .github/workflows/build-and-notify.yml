@@ -52,6 +52,7 @@ jobs:
         run: |
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build Release APK
         env:
@@ -60,18 +61,19 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           APP_VERSION: ${{ steps.appver.outputs.name }}
+          BUILD_SHA: ${{ steps.appver.outputs.sha }}
         run: |
           cd android && ./gradlew assembleRelease --no-daemon
           RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -n "$RAW_APK" ] && [ -f "$RAW_APK" ]; then
-            cp "$RAW_APK" "app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-release.apk"
+            cp "$RAW_APK" "app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-${BUILD_SHA}-release.apk"
           fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LEDSync-v${{ steps.appver.outputs.name }}-release-apk
-          path: android/app/build/outputs/apk/release/LEDSync-v${{ steps.appver.outputs.name }}-release.apk
+          name: LEDSync-v${{ steps.appver.outputs.name }}-${{ steps.appver.outputs.sha }}-release-apk
+          path: android/app/build/outputs/apk/release/LEDSync-v${{ steps.appver.outputs.name }}-${{ steps.appver.outputs.sha }}-release.apk
           if-no-files-found: error
 
       - name: Send Telegram Notification & APK
@@ -80,20 +82,21 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           APP_VERSION: ${{ steps.appver.outputs.name }}
+          BUILD_SHA: ${{ steps.appver.outputs.sha }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Telegram bot token or chat ID secret is not set. Skipping Telegram notification."
             exit 0
           fi
 
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          SHORT_SHA="$BUILD_SHA"
           RAW_COMMIT_MSG=$(git log -1 --pretty=format:"%s")
           CLEAN_COMMIT_MSG=$(echo "$RAW_COMMIT_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
           COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
           BRANCH_NAME="${GITHUB_REF_NAME:-unknown}"
           JOB_STATUS="${{ job.status }}"
 
-          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-release.apk"
+          APK_PATH="android/app/build/outputs/apk/release/LEDSync-v${APP_VERSION}-${BUILD_SHA}-release.apk"
 
           if [ "$JOB_STATUS" = "success" ] && [ -f "$APK_PATH" ]; then
             CAPTION=$(printf "🚀 <b>LEDSync v%s Release Build Success</b>\n\n📌 <b>Commit:</b> <code>%s</code>\n📝 <b>Message:</b> %s\n👤 <b>Author:</b> %s\n🌿 <b>Branch:</b> %s" "$APP_VERSION" "$SHORT_SHA" "$CLEAN_COMMIT_MSG" "$COMMIT_AUTHOR" "$BRANCH_NAME")
