@@ -223,11 +223,13 @@ class HardwareRepository @Inject constructor(
 
     suspend fun turnOffAll(): Boolean {
         val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}"
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         isLightActive = false
         synchronized(ownerLock) {
             currentOwner = null
         }
+        releaseAndRestore(LedOwner.MANUAL)
         log("[${dateFormat.format(Date())}] Soft turn-off executed", LogLevel.INFO)
         return ok
     }

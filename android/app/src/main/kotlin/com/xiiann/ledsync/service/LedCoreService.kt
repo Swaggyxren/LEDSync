@@ -312,7 +312,7 @@ class LedCoreService : NotificationListenerService() {
             fireChargeTierFlash(level)
         } else if (!charging && wasCharging == true) {
             chargeTierJob?.cancel()
-            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_UNPLUG", owner = LedOwner.NOTIFICATION)
+            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_UNPLUG", owner = LedOwner.BATTERY)
             hasFlashedFullThisSession = false
         }
         if (charging && level >= 100 && !hasFlashedFullThisSession) {
@@ -397,9 +397,21 @@ class LedCoreService : NotificationListenerService() {
     private fun fireChargeTierFlash(level: Int) {
         chargeTierJob?.cancel()
         chargeTierJob = serviceScope.launch {
-            hardwareRepository.fireEffect(chargeTierHex(level), "CHARGE_TIER[$level%]", owner = LedOwner.NOTIFICATION)
+            hardwareRepository.fireEffect(chargeTierHex(level), "CHARGE_TIER[$level%]", owner = LedOwner.BATTERY)
             delay(3000L)
-            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_CLEAR", owner = LedOwner.NOTIFICATION)
+            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_CLEAR", owner = LedOwner.BATTERY)
+            recheckActiveBatteryEffect()
+        }
+    }
+
+    private suspend fun recheckActiveBatteryEffect() {
+        val config: BatteryConfig = preferencesRepository.batteryConfig.first()
+        if (inCritical) {
+            playBatteryEffect(config.criticalEffectName)
+        } else if (inLow) {
+            playBatteryEffect(config.lowEffectName)
+        } else if (inFull) {
+            playBatteryEffect(config.fullEffectName)
         }
     }
 
