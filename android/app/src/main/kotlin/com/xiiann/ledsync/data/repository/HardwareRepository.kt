@@ -27,6 +27,7 @@ enum class LedOwner(val priority: Int) {
 }
 
 data class LogEntry(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val timestamp: String,
     val message: String,
     val level: LogLevel

@@ -269,7 +269,7 @@ fun AospLogConsole(
                     LazyColumn(state = listState) {
                         items(
                             items = recentLogs,
-                            key = { entry -> entry.timestamp + "_" + entry.message.hashCode() }
+                            key = { entry -> entry.id }
                         ) { entry ->
                             val color = when (entry.level) {
                                 LogLevel.SUCCESS -> ConsoleSuccess
