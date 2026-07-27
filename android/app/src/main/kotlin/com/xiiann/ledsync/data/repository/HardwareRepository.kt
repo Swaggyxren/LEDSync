@@ -19,19 +19,12 @@ enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
 
 enum class RootState { IDLE, CHECKING, GRANTED, DENIED }
 
-/**
- * Priority tiers for arbitrating concurrent LED triggers, declared in
- * ascending priority order (ordinal used for comparison). Without this,
- * a notification blip, a battery pulse, and audio-reactive mode all write
- * to the same sysfs node independently with nothing preventing them from
- * stomping each other mid-effect.
- *
- * MUSIC is the only tier without its own repeating timer, so it's the only
- * one that needs an explicit "resume" after being preempted -- battery
- * pulse trains re-render on their own schedule regardless, and
- * notifications are one-shot by nature.
- */
-enum class LedOwner { MUSIC, BATTERY, NOTIFICATION, MANUAL }
+enum class LedOwner(val priority: Int) {
+    MUSIC(10),
+    BATTERY(20),
+    NOTIFICATION(30),
+    MANUAL(40)
+}
 
 data class LogEntry(
     val timestamp: String,
@@ -48,41 +41,6 @@ class HardwareRepository @Inject constructor(
 
     var masterEnabled: Boolean = true
 
-    private val ownerLock = Any()
-    private var currentOwner: LedOwner? = null
-    private var savedMusicMode: AudioLedMode? = null
-    private var savedMusicGain: Int = AudioGain.DEFAULT_LEVEL
-
-    /** True if [owner] may proceed right now -- a lower-priority caller is
-     *  blocked while a higher-priority effect is in flight (e.g. a stray
-     *  battery pulse can't stomp a notification blip that's mid-animation). */
-    private fun tryAcquire(owner: LedOwner): Boolean = synchronized(ownerLock) {
-        val current = currentOwner
-        if (current == null || owner.ordinal >= current.ordinal) {
-            currentOwner = owner
-            true
-        } else {
-            log("[${dateFormat.format(Date())}] ${owner.name} blocked -- $current active", LogLevel.WARNING)
-            false
-        }
-    }
-
-    /** Call when a transient (BATTERY/NOTIFICATION/MANUAL) effect fully
-     *  finishes. Hands control back to continuous music mode if it was
-     *  preempted and is still supposed to be playing. */
-    suspend fun releaseAndRestore(owner: LedOwner) {
-        var resumeMode: AudioLedMode? = null
-        var resumeGain = AudioGain.DEFAULT_LEVEL
-        synchronized(ownerLock) {
-            if (currentOwner == owner) currentOwner = null
-            if (currentOwner == null) {
-                resumeMode = savedMusicMode
-                resumeGain = savedMusicGain
-            }
-        }
-        resumeMode?.let { setAudioReactiveMode(it, resumeGain) }
-    }
-
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
@@ -92,6 +50,11 @@ class HardwareRepository @Inject constructor(
     private val _actionLogs = MutableStateFlow<List<LogEntry>>(emptyList())
     val actionLogs: StateFlow<List<LogEntry>> = _actionLogs.asStateFlow()
 
+    private val ownerLock = Any()
+    private var currentOwner: LedOwner? = null
+    private var savedMusicMode: AudioLedMode? = null
+    private var savedMusicGain: Int = AudioGain.DEFAULT_LEVEL
+
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     fun setConfig(config: DeviceConfig) {
@@ -100,6 +63,32 @@ class HardwareRepository @Inject constructor(
     }
 
     fun getConfig(): DeviceConfig = activeConfig
+
+    fun tryAcquire(owner: LedOwner): Boolean {
+        synchronized(ownerLock) {
+            val current = currentOwner
+            if (current == null || owner.priority >= current.priority) {
+                currentOwner = owner
+                return true
+            }
+            log("[${dateFormat.format(Date())}] SUPPRESSED[$owner]: preempted by ${current.name}", LogLevel.INFO)
+            return false
+        }
+    }
+
+    suspend fun releaseAndRestore(owner: LedOwner) {
+        val (shouldRestore, musicMode, musicGain) = synchronized(ownerLock) {
+            if (currentOwner == owner) {
+                currentOwner = null
+            }
+            val mode = savedMusicMode
+            val gain = savedMusicGain
+            Triple(mode != null && currentOwner == null, mode, gain)
+        }
+        if (shouldRestore && musicMode != null) {
+            setAudioReactiveMode(musicMode, musicGain)
+        }
+    }
 
     fun log(msg: String, level: LogLevel = LogLevel.INFO) {
         val entry = LogEntry(
@@ -170,9 +159,6 @@ class HardwareRepository @Inject constructor(
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         if (ok) {
-            // Stock service always follows the trigger with a gain command
-            // ~100ms later -- without it the chip is left at whatever its
-            // internal default gain is, which reads as "too sensitive".
             delay(100L)
             setAudioGain(gainLevel)
         }
@@ -203,7 +189,8 @@ class HardwareRepository @Inject constructor(
         if (!tryAcquire(owner)) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
@@ -213,51 +200,49 @@ class HardwareRepository @Inject constructor(
         if (!tryAcquire(owner)) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
     suspend fun fireStop(hex: String = activeConfig.turnOffHex, tag: String = "STOP", owner: LedOwner = LedOwner.NOTIFICATION): Boolean {
         val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '$hex' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.INFO else LogLevel.ERROR)
         releaseAndRestore(owner)
         return ok
     }
 
-    /** Incoming call started ringing -- takes NOTIFICATION priority so it
-     *  interrupts ambient music/battery effects, same as stock. No timer:
-     *  stays lit until [endPhoneCall] is called on answer or hangup. */
     suspend fun ringPhoneCall(): Boolean =
         fireEffect(activeConfig.phoneCallHex, "CALL_RINGING", owner = LedOwner.NOTIFICATION)
 
-    /** Call answered or ended -- stops the ring flash and hands control
-     *  back to music mode if it was playing before the call interrupted it. */
     suspend fun endPhoneCall(): Boolean =
-        fireStop(activeConfig.turnOffHex, "CALL_END", owner = LedOwner.NOTIFICATION)
+        fireStop(activeConfig.turnOffHex, "CALL_ENDED", owner = LedOwner.NOTIFICATION)
 
-    suspend fun turnOffAll(owner: LedOwner = LedOwner.BATTERY): Boolean {
+    suspend fun turnOffAll(): Boolean {
         val cfg = activeConfig
         val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         isLightActive = false
+        synchronized(ownerLock) {
+            currentOwner = null
+        }
         log("[${dateFormat.format(Date())}] Soft turn-off executed", LogLevel.INFO)
-        releaseAndRestore(owner)
         return ok
     }
 
     suspend fun emergencyKillAndRevive(offTimeMs: Long = 250L): Boolean {
         log("[${dateFormat.format(Date())}] Emergency Stop — killing LED service…", LogLevel.WARNING)
-        synchronized(ownerLock) {
-            currentOwner = null
-            savedMusicMode = null
-        }
         val cfg = activeConfig
         val killCmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; " +
                 "echo 0 > ${cfg.awPath}/brightness; " +
                 "echo 0 > ${cfg.awPath}/hwen"
         rootExecutor.runSu(killCmd)
         isLightActive = false
+        synchronized(ownerLock) {
+            currentOwner = null
+        }
         delay(offTimeMs)
         log("[${dateFormat.format(Date())}] Service restarted successfully.", LogLevel.SUCCESS)
         log("[${dateFormat.format(Date())}] Hardware service restarted. Re-initializing…", LogLevel.INFO)
