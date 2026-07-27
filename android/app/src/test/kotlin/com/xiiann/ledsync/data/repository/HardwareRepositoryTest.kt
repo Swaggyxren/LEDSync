@@ -2,10 +2,12 @@ package com.xiiann.ledsync.data.repository
 
 import com.xiiann.ledsync.data.executor.IRootExecutor
 import com.xiiann.ledsync.domain.model.LH8nConfig
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -34,12 +36,18 @@ class HardwareRepositoryTest {
     }
 
     private lateinit var mockExecutor: MockRootExecutor
+    private lateinit var mockPreferences: PreferencesRepository
     private lateinit var repository: HardwareRepository
 
     @Before
     fun setUp() {
         mockExecutor = MockRootExecutor()
-        repository = HardwareRepository(mockExecutor)
+        mockPreferences = mockk(relaxed = true) {
+            every { audioLedEnabled } returns flowOf(false)
+            every { audioLedDynamic } returns flowOf(false)
+            every { audioLedGain } returns flowOf(3)
+        }
+        repository = HardwareRepository(mockExecutor, mockPreferences)
         repository.setConfig(LH8nConfig())
     }
 
@@ -50,7 +58,6 @@ class HardwareRepositoryTest {
         assertEquals(1, mockExecutor.executedCommands.size)
         assertTrue(mockExecutor.executedCommands[0].contains("hwen"))
 
-        // Second call without force should use cache and perform 0 additional su calls
         val result2 = repository.ensureLedEnabled(force = false)
         assertTrue(result2)
         assertEquals(1, mockExecutor.executedCommands.size)
@@ -74,9 +81,7 @@ class HardwareRepositoryTest {
         assertEquals(2, mockExecutor.executedCommands.size)
         assertTrue(mockExecutor.executedCommands[1].contains("00 01 00 00 00 00"))
 
-        // After turnOffAll, next write must re-prime
         repository.sendRawHex("00 05 01 00 00 00")
-        // Should have: 1 (initial prime) + 1 (turnOff) + 1 (re-prime) + 1 (sendRawHex) = 4 commands
         assertEquals(4, mockExecutor.executedCommands.size)
     }
 
@@ -85,7 +90,6 @@ class HardwareRepositoryTest {
         val ok = repository.emergencyKillAndRevive(offTimeMs = 10L)
         assertTrue(ok)
         assertTrue(repository.isReady.value)
-        // Commands executed: 1 (kill command) + 1 (re-prime command)
         assertEquals(2, mockExecutor.executedCommands.size)
         assertTrue(mockExecutor.executedCommands[0].contains("echo 0 >"))
     }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -35,7 +36,8 @@ data class LogEntry(
 
 @Singleton
 class HardwareRepository @Inject constructor(
-    private val rootExecutor: IRootExecutor
+    private val rootExecutor: IRootExecutor,
+    private val preferencesRepository: PreferencesRepository
 ) {
     private var activeConfig: DeviceConfig = LH8nConfig()
     private var isLightActive = false
@@ -77,6 +79,14 @@ class HardwareRepository @Inject constructor(
         }
     }
 
+    private suspend fun getSavedAudioLedSettings(): Triple<Boolean, AudioLedMode, Int> {
+        val enabled = preferencesRepository.audioLedEnabled.first()
+        val dynamic = preferencesRepository.audioLedDynamic.first()
+        val gain = preferencesRepository.audioLedGain.first()
+        val mode = if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
+        return Triple(enabled, mode, gain)
+    }
+
     suspend fun releaseAndRestore(owner: LedOwner) {
         val (shouldRestore, musicMode, musicGain) = synchronized(ownerLock) {
             if (currentOwner == owner) {
@@ -84,10 +94,15 @@ class HardwareRepository @Inject constructor(
             }
             val mode = savedMusicMode
             val gain = savedMusicGain
-            Triple(mode != null && currentOwner == null, mode, gain)
+            Triple(currentOwner == null, mode, gain)
         }
-        if (shouldRestore && musicMode != null) {
-            setAudioReactiveMode(musicMode, musicGain)
+        if (shouldRestore) {
+            val (enabled, prefMode, prefGain) = getSavedAudioLedSettings()
+            if (enabled) {
+                val modeToUse = musicMode ?: prefMode
+                val gainToUse = if (musicGain > 0) musicGain else prefGain
+                setAudioReactiveMode(modeToUse, gainToUse)
+            }
         }
     }
 
@@ -124,6 +139,7 @@ class HardwareRepository @Inject constructor(
             log("[${dateFormat.format(Date())}] System Ready. Awaiting effect selection.", LogLevel.SUCCESS)
             _isReady.value = true
             _rootState.value = RootState.GRANTED
+            releaseAndRestore(LedOwner.MANUAL)
         } else {
             log("[${dateFormat.format(Date())}] Hardware init failed", LogLevel.ERROR)
             _isReady.value = false
@@ -152,6 +168,10 @@ class HardwareRepository @Inject constructor(
             savedMusicMode = mode
             savedMusicGain = gainLevel
         }
+        preferencesRepository.setAudioLedEnabled(true)
+        preferencesRepository.setAudioLedDynamic(mode == AudioLedMode.DYNAMIC)
+        preferencesRepository.setAudioLedGain(gainLevel)
+
         if (!tryAcquire(LedOwner.MUSIC)) return false
         ensureLedEnabled()
         val cfg = activeConfig
@@ -167,6 +187,10 @@ class HardwareRepository @Inject constructor(
     }
 
     suspend fun setAudioGain(level: Int): Boolean {
+        synchronized(ownerLock) {
+            savedMusicGain = level
+        }
+        preferencesRepository.setAudioLedGain(level)
         val cfg = activeConfig
         val cmd = AudioGain.command(level)
         val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
@@ -179,8 +203,9 @@ class HardwareRepository @Inject constructor(
             savedMusicMode = null
             if (currentOwner == LedOwner.MUSIC) currentOwner = null
         }
+        preferencesRepository.setAudioLedEnabled(false)
         val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val ok = rootExecutor.runSuWithRetry("echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[OFF] -> ok=$ok", if (ok) LogLevel.INFO else LogLevel.ERROR)
         return ok
     }
