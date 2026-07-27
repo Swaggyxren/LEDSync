@@ -87,7 +87,7 @@ class HardwareRepository @Inject constructor(
         return Triple(enabled, mode, gain)
     }
 
-    suspend fun releaseAndRestore(owner: LedOwner) {
+    suspend fun releaseAndRestore(owner: LedOwner, restoreDelayMs: Long = 500L) {
         val (shouldRestore, musicMode, musicGain) = synchronized(ownerLock) {
             if (currentOwner == owner) {
                 currentOwner = null
@@ -101,6 +101,9 @@ class HardwareRepository @Inject constructor(
             if (enabled) {
                 val modeToUse = musicMode ?: prefMode
                 val gainToUse = if (musicGain > 0) musicGain else prefGain
+                if (restoreDelayMs > 0) {
+                    delay(restoreDelayMs)
+                }
                 setAudioReactiveMode(modeToUse, gainToUse)
             }
         }
@@ -139,7 +142,7 @@ class HardwareRepository @Inject constructor(
             log("[${dateFormat.format(Date())}] System Ready. Awaiting effect selection.", LogLevel.SUCCESS)
             _isReady.value = true
             _rootState.value = RootState.GRANTED
-            releaseAndRestore(LedOwner.MANUAL)
+            releaseAndRestore(LedOwner.MANUAL, restoreDelayMs = 200L)
         } else {
             log("[${dateFormat.format(Date())}] Hardware init failed", LogLevel.ERROR)
             _isReady.value = false
@@ -175,7 +178,8 @@ class HardwareRepository @Inject constructor(
         if (!tryAcquire(LedOwner.MUSIC)) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
+        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; " +
+                "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
                 "echo -n '${mode.hex}' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
@@ -215,7 +219,7 @@ class HardwareRepository @Inject constructor(
         if (!tryAcquire(owner)) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
@@ -226,7 +230,7 @@ class HardwareRepository @Inject constructor(
         if (!tryAcquire(owner)) return false
         ensureLedEnabled()
         val cfg = activeConfig
-        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
@@ -234,10 +238,10 @@ class HardwareRepository @Inject constructor(
 
     suspend fun fireStop(hex: String = activeConfig.turnOffHex, tag: String = "STOP", owner: LedOwner = LedOwner.NOTIFICATION): Boolean {
         val cfg = activeConfig
-        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
+        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.INFO else LogLevel.ERROR)
-        releaseAndRestore(owner)
+        releaseAndRestore(owner, restoreDelayMs = 500L)
         return ok
     }
 
@@ -249,13 +253,13 @@ class HardwareRepository @Inject constructor(
 
     suspend fun turnOffAll(): Boolean {
         val cfg = activeConfig
-        val cmd = "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}"
+        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         isLightActive = false
         synchronized(ownerLock) {
             currentOwner = null
         }
-        releaseAndRestore(LedOwner.MANUAL)
+        releaseAndRestore(LedOwner.MANUAL, restoreDelayMs = 500L)
         log("[${dateFormat.format(Date())}] Soft turn-off executed", LogLevel.INFO)
         return ok
     }
