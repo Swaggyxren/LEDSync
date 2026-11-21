@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'test/**'
   workflow_dispatch:
 
 jobs:
@@ -53,6 +54,9 @@ jobs:
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Run Unit Tests
+        run: cd android && ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Release APK
         env:

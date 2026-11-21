@@ -8,6 +8,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -52,11 +53,14 @@ class HardwareRepositoryTest {
     }
 
     @Test
-    fun `ensureLedEnabled primes hardware on first call and caches state`() = runTest {
+    fun `ensureLedEnabled primes hardware once without competing brightness write`() = runTest {
         val result1 = repository.ensureLedEnabled(force = false)
         assertTrue(result1)
         assertEquals(1, mockExecutor.executedCommands.size)
-        assertTrue(mockExecutor.executedCommands[0].contains("hwen"))
+        val primeCmd = mockExecutor.executedCommands[0]
+        assertTrue(primeCmd.contains("hwen"))
+        assertTrue(primeCmd.contains("00 00 00 00 00 00"))
+        assertFalse(primeCmd.contains("/brightness"))
 
         val result2 = repository.ensureLedEnabled(force = false)
         assertTrue(result2)
@@ -64,25 +68,45 @@ class HardwareRepositoryTest {
     }
 
     @Test
-    fun `ensureLedEnabled re-primes hardware when force is true`() = runTest {
+    fun `sendRawHex sends clean single effect command when already active`() = runTest {
         repository.ensureLedEnabled(force = false)
         assertEquals(1, mockExecutor.executedCommands.size)
 
-        repository.ensureLedEnabled(force = true)
+        val ok = repository.sendRawHex("00 05 01 00 00 00")
+        assertTrue(ok)
         assertEquals(2, mockExecutor.executedCommands.size)
+        val cmd = mockExecutor.executedCommands[1]
+        assertTrue(cmd.contains("00 05 01 00 00 00"))
+        assertFalse(cmd.contains("00 01 00 00 00 00"))
     }
 
     @Test
-    fun `turnOffAll sends turn off hex and invalidates active cache`() = runTest {
+    fun `turnOffAll sends single turn off hex and invalidates active cache`() = runTest {
         repository.ensureLedEnabled(force = false)
         assertEquals(1, mockExecutor.executedCommands.size)
 
         repository.turnOffAll()
         assertEquals(2, mockExecutor.executedCommands.size)
         assertTrue(mockExecutor.executedCommands[1].contains("00 01 00 00 00 00"))
+        assertFalse(mockExecutor.executedCommands[1].contains("00 00 00 00 00 00"))
 
         repository.sendRawHex("00 05 01 00 00 00")
         assertEquals(4, mockExecutor.executedCommands.size)
+    }
+
+    @Test
+    fun `updateSuppression blocks background effects and turns off LED`() = runTest {
+        repository.ensureLedEnabled(force = false)
+        repository.updateSuppression(true, "Rear camera active")
+        assertTrue(repository.isSuppressed.value)
+
+        val blocked = repository.fireEffect("00 05 01 00 00 00", owner = LedOwner.NOTIFICATION)
+        assertFalse(blocked)
+
+        repository.updateSuppression(false, null)
+        assertFalse(repository.isSuppressed.value)
+        val allowed = repository.fireEffect("00 05 01 00 00 00", owner = LedOwner.NOTIFICATION)
+        assertTrue(allowed)
     }
 
     @Test

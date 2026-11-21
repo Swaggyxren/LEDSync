@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.xiiann.ledsync.domain.model.AppearanceMode
 import com.xiiann.ledsync.domain.model.AudioGain
+import com.xiiann.ledsync.domain.model.StockBehaviorSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,7 +25,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 data class BatteryConfig(
     val lowEffectName: String = "Rise",
     val criticalEffectName: String = "Lightning",
-    val fullEffectName: String = "Pureness",
+    val fullEffectName: String = "Halo",
     val lowThreshold: Int = 20,
     val criticalThreshold: Int = 10,
     val fullThreshold: Int = 100
@@ -55,6 +57,17 @@ class PreferencesRepository @Inject constructor(
         val KEY_AUDIO_LED_ENABLED = booleanPreferencesKey("audio_led_enabled")
         val KEY_AUDIO_LED_DYNAMIC = booleanPreferencesKey("audio_led_dynamic")
         val KEY_AUDIO_LED_GAIN = intPreferencesKey("audio_led_gain")
+
+        val KEY_APPEARANCE_MODE = stringPreferencesKey("appearance_mode")
+        val KEY_CAMERA_GUARD = booleanPreferencesKey("stock_camera_guard")
+        val KEY_RESPECT_DND = booleanPreferencesKey("stock_respect_dnd")
+        val KEY_RESPECT_BATTERY_SAVER = booleanPreferencesKey("stock_respect_battery_saver")
+        val KEY_SCHEDULE_ENABLED = booleanPreferencesKey("stock_schedule_enabled")
+        val KEY_SCHEDULE_START_MIN = intPreferencesKey("stock_schedule_start_min")
+        val KEY_SCHEDULE_END_MIN = intPreferencesKey("stock_schedule_end_min")
+        val KEY_AUTO_MUSIC_SYNC = booleanPreferencesKey("stock_auto_music_sync")
+        val KEY_AUTO_VOLUME_GAIN = booleanPreferencesKey("stock_auto_volume_gain")
+        val KEY_PHONE_CALL_EFFECT = stringPreferencesKey("stock_phone_call_effect")
     }
 
     val notifHexMap: Flow<Map<String, String>> = dataStore.data.map { prefs ->
@@ -89,10 +102,10 @@ class PreferencesRepository @Inject constructor(
         BatteryConfig(
             lowEffectName = prefs[KEY_BATT_LOW_EFFECT] ?: "Rise",
             criticalEffectName = prefs[KEY_BATT_CRIT_EFFECT] ?: "Lightning",
-            fullEffectName = prefs[KEY_BATT_FULL_EFFECT] ?: "Pureness",
+            fullEffectName = prefs[KEY_BATT_FULL_EFFECT] ?: "Halo",
             lowThreshold = (prefs[KEY_BATT_LOW_THRESH] ?: 20).coerceIn(5, 50),
             criticalThreshold = (prefs[KEY_BATT_CRIT_THRESH] ?: 10).coerceIn(1, 30),
-            fullThreshold = (prefs[KEY_BATT_FULL_THRESH] ?: 100).coerceIn(90, 100)
+            fullThreshold = (prefs[KEY_BATT_FULL_THRESH] ?: 100).coerceIn(70, 100)
         )
     }
 
@@ -119,6 +132,24 @@ class PreferencesRepository @Inject constructor(
     val audioLedGain: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_AUDIO_LED_GAIN] ?: AudioGain.DEFAULT_LEVEL)
             .coerceIn(AudioGain.MIN_LEVEL, AudioGain.MAX_LEVEL)
+    }
+
+    val appearanceMode: Flow<AppearanceMode> = dataStore.data.map { prefs ->
+        AppearanceMode.fromStored(prefs[KEY_APPEARANCE_MODE])
+    }
+
+    val stockBehaviorSettings: Flow<StockBehaviorSettings> = dataStore.data.map { prefs ->
+        StockBehaviorSettings(
+            cameraGuardEnabled = prefs[KEY_CAMERA_GUARD] ?: true,
+            respectDnd = prefs[KEY_RESPECT_DND] ?: true,
+            respectBatterySaver = prefs[KEY_RESPECT_BATTERY_SAVER] ?: true,
+            scheduleEnabled = prefs[KEY_SCHEDULE_ENABLED] ?: false,
+            scheduleStartMinutes = (prefs[KEY_SCHEDULE_START_MIN] ?: 7 * 60).coerceIn(0, 1439),
+            scheduleEndMinutes = (prefs[KEY_SCHEDULE_END_MIN] ?: 22 * 60).coerceIn(0, 1439),
+            autoMusicSync = prefs[KEY_AUTO_MUSIC_SYNC] ?: false,
+            autoVolumeGain = prefs[KEY_AUTO_VOLUME_GAIN] ?: false,
+            phoneCallEffectName = prefs[KEY_PHONE_CALL_EFFECT] ?: "Soft"
+        )
     }
 
     suspend fun saveNotifMappings(
@@ -179,6 +210,38 @@ class PreferencesRepository @Inject constructor(
     suspend fun setAudioLedGain(level: Int) {
         dataStore.edit { prefs ->
             prefs[KEY_AUDIO_LED_GAIN] = level
+        }
+    }
+
+    suspend fun setAppearanceMode(mode: AppearanceMode) {
+        dataStore.edit { prefs ->
+            prefs[KEY_APPEARANCE_MODE] = mode.name
+        }
+    }
+
+    suspend fun updateStockBehavior(transform: (StockBehaviorSettings) -> StockBehaviorSettings) {
+        dataStore.edit { prefs ->
+            val current = StockBehaviorSettings(
+                cameraGuardEnabled = prefs[KEY_CAMERA_GUARD] ?: true,
+                respectDnd = prefs[KEY_RESPECT_DND] ?: true,
+                respectBatterySaver = prefs[KEY_RESPECT_BATTERY_SAVER] ?: true,
+                scheduleEnabled = prefs[KEY_SCHEDULE_ENABLED] ?: false,
+                scheduleStartMinutes = (prefs[KEY_SCHEDULE_START_MIN] ?: 7 * 60).coerceIn(0, 1439),
+                scheduleEndMinutes = (prefs[KEY_SCHEDULE_END_MIN] ?: 22 * 60).coerceIn(0, 1439),
+                autoMusicSync = prefs[KEY_AUTO_MUSIC_SYNC] ?: false,
+                autoVolumeGain = prefs[KEY_AUTO_VOLUME_GAIN] ?: false,
+                phoneCallEffectName = prefs[KEY_PHONE_CALL_EFFECT] ?: "Soft"
+            )
+            val updated = transform(current)
+            prefs[KEY_CAMERA_GUARD] = updated.cameraGuardEnabled
+            prefs[KEY_RESPECT_DND] = updated.respectDnd
+            prefs[KEY_RESPECT_BATTERY_SAVER] = updated.respectBatterySaver
+            prefs[KEY_SCHEDULE_ENABLED] = updated.scheduleEnabled
+            prefs[KEY_SCHEDULE_START_MIN] = updated.scheduleStartMinutes.coerceIn(0, 1439)
+            prefs[KEY_SCHEDULE_END_MIN] = updated.scheduleEndMinutes.coerceIn(0, 1439)
+            prefs[KEY_AUTO_MUSIC_SYNC] = updated.autoMusicSync
+            prefs[KEY_AUTO_VOLUME_GAIN] = updated.autoVolumeGain
+            prefs[KEY_PHONE_CALL_EFFECT] = updated.phoneCallEffectName
         }
     }
 }

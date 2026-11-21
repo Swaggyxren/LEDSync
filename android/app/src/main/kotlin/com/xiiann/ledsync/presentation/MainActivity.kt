@@ -6,7 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.xiiann.ledsync.presentation.main.MainShell
+import com.xiiann.ledsync.presentation.main.MainViewModel
 import com.xiiann.ledsync.presentation.theme.LEDSyncTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -19,8 +23,10 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         )
         setContent {
-            LEDSyncTheme {
-                MainShell()
+            val mainViewModel: MainViewModel = hiltViewModel()
+            val appearanceMode by mainViewModel.appearanceMode.collectAsState()
+            LEDSyncTheme(appearanceMode = appearanceMode) {
+                MainShell(mainViewModel = mainViewModel)
             }
         }
     }

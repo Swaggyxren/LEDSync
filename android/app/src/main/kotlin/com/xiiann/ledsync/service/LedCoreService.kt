@@ -12,10 +12,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.database.ContentObserver
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.telephony.PhoneStateListener
@@ -27,6 +33,10 @@ import com.xiiann.ledsync.data.repository.BatteryConfig
 import com.xiiann.ledsync.data.repository.HardwareRepository
 import com.xiiann.ledsync.data.repository.LedOwner
 import com.xiiann.ledsync.data.repository.PreferencesRepository
+import com.xiiann.ledsync.domain.model.AudioGain
+import com.xiiann.ledsync.domain.model.AudioLedMode
+import com.xiiann.ledsync.domain.model.StockBehaviorSettings
+import com.xiiann.ledsync.domain.model.StockGuardPolicy
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +45,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -59,10 +70,25 @@ class LedCoreService : NotificationListenerService() {
     private val lastTriggerPerPkg = HashMap<String, Long>()
     private val activeLoopingPkgs = mutableSetOf<String>()
 
-    private var batteryReceiverRegistered = false
+    private var receiversRegistered = false
 
     private var telephonyManager: TelephonyManager? = null
     private var phoneStateListener: PhoneStateListener? = null
+
+    private var cameraManager: CameraManager? = null
+    private var cameraCallback: CameraManager.AvailabilityCallback? = null
+    private val busyRearCameras = mutableSetOf<String>()
+
+    private var audioManager: AudioManager? = null
+    private var audioPlaybackCallback: AudioManager.AudioPlaybackCallback? = null
+    private var autoMusicActive = false
+
+    private var settingsObserver: ContentObserver? = null
+    private var scheduleTickerJob: Job? = null
+    private var behaviorCollectorJob: Job? = null
+
+    @Volatile private var stockBehavior = StockBehaviorSettings()
+    @Volatile private var rearCameraBusy = false
 
     // Battery state tracking
     private var inLow = false
@@ -74,27 +100,34 @@ class LedCoreService : NotificationListenerService() {
     private var fullJob: Job? = null
     private var batteryLoopStopJob: Job? = null
 
-    // Plug-in charge-tier flash (native parity) -- null until the first
-    // battery broadcast, so app startup while already charging never counts
-    // as a "just plugged in" transition.
     private var lastChargingState: Boolean? = null
     private var hasFlashedFullThisSession = false
     private var chargeTierJob: Job? = null
 
-    private val batteryReceiver = object : BroadcastReceiver() {
+    private val systemEventReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
-                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                val pct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
-                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            when (intent.action) {
+                Intent.ACTION_BATTERY_CHANGED -> {
+                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    val pct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
+                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                    val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                         status == BatteryManager.BATTERY_STATUS_FULL
-
-                if (pct >= 0) {
-                    serviceScope.launch {
-                        handleBatteryChanged(pct, charging)
+                    if (pct >= 0) {
+                        serviceScope.launch { handleBatteryChanged(pct, charging) }
                     }
+                }
+                "android.media.VOLUME_CHANGED_ACTION" -> {
+                    val stream = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
+                    if (stream == AudioManager.STREAM_MUSIC) {
+                        serviceScope.launch { handleMediaVolumeChanged() }
+                    }
+                }
+                PowerManager.ACTION_POWER_SAVE_MODE_CHANGED,
+                Intent.ACTION_TIME_CHANGED,
+                Intent.ACTION_TIMEZONE_CHANGED -> {
+                    serviceScope.launch { evaluateGuards() }
                 }
             }
         }
@@ -109,43 +142,244 @@ class LedCoreService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d("LedCoreService", "Listener CONNECTED ✅")
+        Log.d("LedCoreService", "Listener CONNECTED")
         startForeground(FG_NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
-        if (!batteryReceiverRegistered) {
-            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-            registerReceiver(batteryReceiver, filter)
-            batteryReceiverRegistered = true
+        if (!receiversRegistered) {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_BATTERY_CHANGED)
+                addAction("android.media.VOLUME_CHANGED_ACTION")
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            }
+            registerReceiver(systemEventReceiver, filter)
+            receiversRegistered = true
         }
 
         registerPhoneCallListener()
+        registerCameraGuard()
+        registerSettingsGuards()
+        registerAudioMonitor()
+        startBehaviorCollectors()
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.d("LedCoreService", "Listener DISCONNECTED ❌ — requesting rebind")
-        if (batteryReceiverRegistered) {
-            try {
-                unregisterReceiver(batteryReceiver)
-            } catch (_: Exception) {}
-            batteryReceiverRegistered = false
-        }
-        unregisterPhoneCallListener()
+        Log.d("LedCoreService", "Listener DISCONNECTED — requesting rebind")
+        teardownMonitors()
         requestRebind(ComponentName(this, LedCoreService::class.java))
     }
 
     override fun onDestroy() {
         stopForeground(STOP_FOREGROUND_REMOVE)
         handler.removeCallbacksAndMessages(null)
+        teardownMonitors()
         serviceScope.cancel()
-        if (batteryReceiverRegistered) {
+        super.onDestroy()
+    }
+
+    private fun teardownMonitors() {
+        if (receiversRegistered) {
             try {
-                unregisterReceiver(batteryReceiver)
+                unregisterReceiver(systemEventReceiver)
             } catch (_: Exception) {}
-            batteryReceiverRegistered = false
+            receiversRegistered = false
         }
         unregisterPhoneCallListener()
-        super.onDestroy()
+        unregisterCameraGuard()
+        unregisterSettingsGuards()
+        unregisterAudioMonitor()
+        behaviorCollectorJob?.cancel()
+        scheduleTickerJob?.cancel()
+    }
+
+    private fun startBehaviorCollectors() {
+        behaviorCollectorJob?.cancel()
+        behaviorCollectorJob = serviceScope.launch {
+            preferencesRepository.stockBehaviorSettings.collect { settings ->
+                stockBehavior = settings
+                evaluateGuards()
+                evaluateAutoMusicState()
+            }
+        }
+        scheduleTickerJob?.cancel()
+        scheduleTickerJob = serviceScope.launch {
+            while (true) {
+                evaluateGuards()
+                delay(60_000L)
+            }
+        }
+    }
+
+    private fun registerCameraGuard() {
+        if (cameraCallback != null) return
+        val cm = getSystemService(CameraManager::class.java) ?: return
+        val cb = object : CameraManager.AvailabilityCallback() {
+            override fun onCameraUnavailable(cameraId: String) {
+                if (!isFrontCamera(cm, cameraId)) {
+                    synchronized(busyRearCameras) { busyRearCameras.add(cameraId) }
+                    rearCameraBusy = true
+                    serviceScope.launch { evaluateGuards() }
+                }
+            }
+
+            override fun onCameraAvailable(cameraId: String) {
+                synchronized(busyRearCameras) {
+                    busyRearCameras.remove(cameraId)
+                    rearCameraBusy = busyRearCameras.isNotEmpty()
+                }
+                serviceScope.launch { evaluateGuards() }
+            }
+        }
+        cm.registerAvailabilityCallback(cb, handler)
+        cameraManager = cm
+        cameraCallback = cb
+    }
+
+    private fun unregisterCameraGuard() {
+        cameraCallback?.let { cameraManager?.unregisterAvailabilityCallback(it) }
+        cameraCallback = null
+        cameraManager = null
+        synchronized(busyRearCameras) { busyRearCameras.clear() }
+        rearCameraBusy = false
+    }
+
+    private fun isFrontCamera(cm: CameraManager, cameraId: String): Boolean =
+        try {
+            cm.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        } catch (_: Exception) {
+            false
+        }
+
+    private fun registerSettingsGuards() {
+        if (settingsObserver != null) return
+        val observer = object : ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) {
+                serviceScope.launch { evaluateGuards() }
+            }
+        }
+        val resolver = contentResolver
+        resolver.registerContentObserver(Settings.Global.getUriFor("zen_mode"), false, observer)
+        resolver.registerContentObserver(Settings.Global.getUriFor("low_power"), false, observer)
+        settingsObserver = observer
+    }
+
+    private fun unregisterSettingsGuards() {
+        settingsObserver?.let {
+            try {
+                contentResolver.unregisterContentObserver(it)
+            } catch (_: Exception) {}
+        }
+        settingsObserver = null
+    }
+
+    private fun registerAudioMonitor() {
+        if (audioPlaybackCallback != null) return
+        val am = getSystemService(AudioManager::class.java) ?: return
+        val cb = object : AudioManager.AudioPlaybackCallback() {
+            override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) {
+                serviceScope.launch { evaluateAutoMusicState(configs.isNotEmpty()) }
+            }
+        }
+        am.registerAudioPlaybackCallback(cb, handler)
+        audioManager = am
+        audioPlaybackCallback = cb
+    }
+
+    private fun unregisterAudioMonitor() {
+        audioPlaybackCallback?.let { audioManager?.unregisterAudioPlaybackCallback(it) }
+        audioPlaybackCallback = null
+        audioManager = null
+    }
+
+    private suspend fun evaluateGuards() {
+        val settings = stockBehavior
+        val zenActive = try {
+            Settings.Global.getInt(contentResolver, "zen_mode", 0) != 0
+        } catch (_: Exception) {
+            false
+        }
+        val batterySaverActive = powerManager.isPowerSaveMode || try {
+            Settings.Global.getInt(contentResolver, "low_power", 0) == 1
+        } catch (_: Exception) {
+            false
+        }
+        val cal = Calendar.getInstance()
+        val nowMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+
+        val reason = when {
+            settings.cameraGuardEnabled && rearCameraBusy -> "Rear camera active"
+            settings.respectDnd && zenActive -> "Do Not Disturb active"
+            settings.respectBatterySaver && batterySaverActive -> "Battery Saver active"
+            settings.scheduleEnabled && !StockGuardPolicy.isWithinActiveWindow(
+                nowMinutes,
+                settings.scheduleStartMinutes,
+                settings.scheduleEndMinutes
+            ) -> "Outside active schedule"
+            else -> null
+        }
+
+        val suppress = StockGuardPolicy.shouldSuppressBackgroundLed(
+            settings = settings,
+            rearCameraBusy = rearCameraBusy,
+            isDndActive = zenActive,
+            isBatterySaverActive = batterySaverActive,
+            nowMinutes = nowMinutes
+        )
+        hardwareRepository.updateSuppression(suppress, reason)
+    }
+
+    private suspend fun evaluateAutoMusicState(hasActivePlayback: Boolean? = null) {
+        val settings = stockBehavior
+        val manualMusicOn = preferencesRepository.audioLedEnabled.first()
+        if (!settings.autoMusicSync || manualMusicOn) {
+            if (autoMusicActive && !settings.autoMusicSync && !manualMusicOn) {
+                autoMusicActive = false
+                hardwareRepository.fireStop(
+                    hardwareRepository.getConfig().turnOffHex,
+                    "AUTO_MUSIC_DISABLED",
+                    owner = LedOwner.MUSIC
+                )
+            }
+            return
+        }
+
+        val am = audioManager ?: return
+        val playing = hasActivePlayback ?: am.isMusicActive
+        if (playing && !autoMusicActive) {
+            autoMusicActive = true
+            val dynamic = preferencesRepository.audioLedDynamic.first()
+            val mode = if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
+            val gainLevel = preferencesRepository.audioLedGain.first()
+            val gainHex = if (settings.autoVolumeGain) {
+                val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                AudioGain.stockHexForVolume(vol, maxVol)
+            } else {
+                null
+            }
+            hardwareRepository.activateAutoMusicSync(mode, gainHex, gainLevel)
+        } else if (!playing && autoMusicActive) {
+            autoMusicActive = false
+            hardwareRepository.fireStop(
+                hardwareRepository.getConfig().turnOffHex,
+                "AUTO_MUSIC_IDLE",
+                owner = LedOwner.MUSIC
+            )
+        }
+    }
+
+    private suspend fun handleMediaVolumeChanged() {
+        val settings = stockBehavior
+        if (!settings.autoVolumeGain) return
+        val am = audioManager ?: return
+        val manualMusicOn = preferencesRepository.audioLedEnabled.first()
+        if (!manualMusicOn && !autoMusicActive) return
+        val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        hardwareRepository.setAudioGainHex(AudioGain.stockHexForVolume(vol, maxVol))
     }
 
     @Suppress("DEPRECATION")
@@ -162,9 +396,11 @@ class LedCoreService : NotificationListenerService() {
             override fun onCallStateChanged(state: Int, phoneNumber: String?) {
                 serviceScope.launch {
                     when (state) {
-                        TelephonyManager.CALL_STATE_RINGING -> hardwareRepository.ringPhoneCall()
+                        TelephonyManager.CALL_STATE_RINGING ->
+                            hardwareRepository.ringPhoneCall(stockBehavior.phoneCallEffectName)
                         TelephonyManager.CALL_STATE_OFFHOOK,
-                        TelephonyManager.CALL_STATE_IDLE -> hardwareRepository.endPhoneCall()
+                        TelephonyManager.CALL_STATE_IDLE ->
+                            hardwareRepository.endPhoneCall()
                     }
                 }
             }
@@ -301,18 +537,17 @@ class LedCoreService : NotificationListenerService() {
     private suspend fun handleBatteryChanged(level: Int, charging: Boolean) {
         if (!hardwareRepository.masterEnabled) return
 
-        // Plug-in charge-tier flash -- native parity: fires once on the
-        // charging transition regardless of the low/critical/full logic
-        // below, so both can legitimately fire back-to-back (e.g. plugging
-        // in at 15% shows the tier-1 flash immediately followed by the
-        // Critical effect), same as stock behaves.
         val wasCharging = lastChargingState
         if (charging && wasCharging == false) {
             hasFlashedFullThisSession = false
             fireChargeTierFlash(level)
         } else if (!charging && wasCharging == true) {
             chargeTierJob?.cancel()
-            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_UNPLUG", owner = LedOwner.BATTERY)
+            hardwareRepository.fireStop(
+                hardwareRepository.getConfig().turnOffHex,
+                "CHARGE_TIER_UNPLUG",
+                owner = LedOwner.BATTERY
+            )
             hasFlashedFullThisSession = false
         }
         if (charging && level >= 100 && !hasFlashedFullThisSession) {
@@ -328,11 +563,6 @@ class LedCoreService : NotificationListenerService() {
         val nowLow = level <= config.lowThreshold && !nowCrit
         val nowFull = charging && level >= config.fullThreshold
 
-        // Exit hysteresis -- always release ownership/turn off here regardless
-        // of whether the effect loops on hardware: a pulse-trained one-shot
-        // pattern has nothing left to actively turn off, but LED ownership
-        // still needs releasing so music mode can resume, and sending the
-        // off command to an already-idle chip is harmless either way.
         if (inCritical && level >= config.criticalThreshold + hysteresis) {
             inCritical = false
             cancelBatteryJobs()
@@ -349,7 +579,6 @@ class LedCoreService : NotificationListenerService() {
             hardwareRepository.turnOffAll()
         }
 
-        // Threshold entry
         if (nowCrit && !inCritical) {
             inCritical = true
             inLow = true
@@ -385,9 +614,6 @@ class LedCoreService : NotificationListenerService() {
         }
     }
 
-    /** Reverse-engineered from stock's hookChargeLed: 3 tiers by current
-     *  level, breakpoint at 20/60 (not 50) -- 60-99% and reaching 100%
-     *  while charging both reuse the same tier-3 hex, exactly like stock. */
     private fun chargeTierHex(level: Int): String = when {
         level < 20 -> "00 02 00 00 00 00"
         level < 60 -> "00 02 01 00 00 00"
@@ -399,25 +625,27 @@ class LedCoreService : NotificationListenerService() {
         chargeTierJob = serviceScope.launch {
             hardwareRepository.fireEffect(chargeTierHex(level), "CHARGE_TIER[$level%]", owner = LedOwner.BATTERY)
             delay(3000L)
-            hardwareRepository.fireStop(hardwareRepository.getConfig().turnOffHex, "CHARGE_TIER_CLEAR", owner = LedOwner.BATTERY)
+            hardwareRepository.fireStop(
+                hardwareRepository.getConfig().turnOffHex,
+                "CHARGE_TIER_CLEAR",
+                owner = LedOwner.BATTERY
+            )
             recheckActiveBatteryEffect()
         }
     }
 
     private suspend fun recheckActiveBatteryEffect() {
         val config: BatteryConfig = preferencesRepository.batteryConfig.first()
-        if (inCritical) {
-            playBatteryEffect(config.criticalEffectName)
-        } else if (inLow) {
-            playBatteryEffect(config.lowEffectName)
-        } else if (inFull) {
-            playBatteryEffect(config.fullEffectName)
+        when {
+            inCritical -> playBatteryEffect(config.criticalEffectName)
+            inLow -> playBatteryEffect(config.lowEffectName)
+            inFull -> playBatteryEffect(config.fullEffectName)
         }
     }
 
     private suspend fun playBatteryEffect(effectName: String) {
         val deviceConfig = hardwareRepository.getConfig()
-        val hex = deviceConfig.ledEffects[effectName] ?: return
+        val hex = deviceConfig.hexForEffect(effectName) ?: return
         hardwareRepository.sendRawHex(hex, "BATT[$effectName]", owner = LedOwner.BATTERY)
     }
 
@@ -438,10 +666,6 @@ class LedCoreService : NotificationListenerService() {
                 playBatteryEffect(effectName)
                 remaining--
             }
-            // Fixed-count train finished but the battery condition may still
-            // be active (hysteresis-exit might never fire) -- release
-            // ownership now so music mode can resume rather than staying
-            // silently blocked long after the LED itself has gone dark.
             hardwareRepository.releaseAndRestore(LedOwner.BATTERY)
         }
     }

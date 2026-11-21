@@ -1,17 +1,16 @@
 package com.xiiann.ledsync.data.repository
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class BatteryConfigTest {
 
     @Test
-    fun `BatteryConfig default values match handoff specifications`() {
+    fun `BatteryConfig default values match UI studio specification`() {
         val config = BatteryConfig()
         assertEquals("Rise", config.lowEffectName)
         assertEquals("Lightning", config.criticalEffectName)
-        assertEquals("Pureness", config.fullEffectName)
+        assertEquals("Halo", config.fullEffectName)
         assertEquals(20, config.lowThreshold)
         assertEquals(10, config.criticalThreshold)
         assertEquals(100, config.fullThreshold)
@@ -25,7 +24,7 @@ class BatteryConfigTest {
         val critClamped = 40.coerceIn(1, 30)
         assertEquals(30, critClamped)
 
-        val fullClamped = 80.coerceIn(90, 100)
-        assertEquals(90, fullClamped)
+        val fullClamped = 60.coerceIn(70, 100)
+        assertEquals(70, fullClamped)
     }
 }

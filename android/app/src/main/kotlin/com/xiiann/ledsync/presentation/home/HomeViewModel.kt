@@ -52,6 +52,10 @@ class HomeViewModel @Inject constructor(
     private val _liveStats = MutableStateFlow(LiveStatsState())
     val liveStats: StateFlow<LiveStatsState> = _liveStats.asStateFlow()
 
+    val masterEnabled: StateFlow<Boolean> = hardwareRepository.masterEnabledFlow
+    val isSuppressed: StateFlow<Boolean> = hardwareRepository.isSuppressed
+    val suppressionReason: StateFlow<String?> = hardwareRepository.suppressionReason
+
     val availableConfigs: List<DeviceConfig> = listOf(LH8nConfig())
 
     val selectedDeviceName = preferencesRepository.selectedDeviceConfig
@@ -63,6 +67,12 @@ class HomeViewModel @Inject constructor(
     init {
         loadDeviceInfo()
         startStatsPolling()
+    }
+
+    fun toggleMasterEnabled() {
+        viewModelScope.launch {
+            hardwareRepository.setMasterEnabled(!masterEnabled.value)
+        }
     }
 
     private fun loadDeviceInfo() {
@@ -119,7 +129,7 @@ class HomeViewModel @Inject constructor(
 
                 val status: Int = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
                 val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                        status == BatteryManager.BATTERY_STATUS_FULL
+                    status == BatteryManager.BATTERY_STATUS_FULL
 
                 _liveStats.value = _liveStats.value.copy(
                     batteryLevel = pct,
@@ -149,30 +159,34 @@ class HomeViewModel @Inject constructor(
     private fun parseRam(meminfoRaw: String) {
         var total = 0
         var avail = 0
-        for (line in meminfoRaw.lineSequence()) {
-            val parts = line.split("\\s+".toRegex())
-            if (parts.size < 2) continue
-            val v = parts[1].toIntOrNull() ?: 0
-            if (line.startsWith("MemTotal:")) total = v
-            if (line.startsWith("MemAvailable:")) avail = v
+        meminfoRaw.lineSequence().forEach { line ->
+            when {
+                line.startsWith("MemTotal:") -> {
+                    total = line.split("\\s+".toRegex()).getOrNull(1)?.toIntOrNull()?.div(1024) ?: 0
+                }
+                line.startsWith("MemAvailable:") -> {
+                    avail = line.split("\\s+".toRegex()).getOrNull(1)?.toIntOrNull()?.div(1024) ?: 0
+                }
+            }
         }
         if (total > 0) {
             _liveStats.value = _liveStats.value.copy(
-                ramUsedMb = (total - avail) / 1024,
-                ramTotalMb = total / 1024
+                ramUsedMb = (total - avail).coerceAtLeast(0),
+                ramTotalMb = total
             )
         }
     }
 
-    fun setSelectedDevice(config: DeviceConfig) {
+    fun selectDevice(deviceName: String) {
         viewModelScope.launch {
-            hardwareRepository.setConfig(config)
-            preferencesRepository.setSelectedDevice(config.deviceName)
-            _deviceInfo.value = _deviceInfo.value.copy(model = config.deviceName)
+            preferencesRepository.setSelectedDevice(deviceName)
+            val cfg = availableConfigs.firstOrNull { it.deviceName == deviceName } ?: LH8nConfig()
+            hardwareRepository.setConfig(cfg)
+            _deviceInfo.value = _deviceInfo.value.copy(model = cfg.deviceName)
         }
     }
 
-    fun markTooltipShown() {
+    fun dismissTooltip() {
         viewModelScope.launch {
             preferencesRepository.setTooltipShown(true)
         }

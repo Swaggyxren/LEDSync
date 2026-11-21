@@ -6,6 +6,7 @@ import com.xiiann.ledsync.data.repository.HardwareRepository
 import com.xiiann.ledsync.data.repository.PreferencesRepository
 import com.xiiann.ledsync.domain.model.AudioGain
 import com.xiiann.ledsync.domain.model.AudioLedMode
+import com.xiiann.ledsync.domain.model.StockBehaviorSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,9 @@ class AudioLedViewModel @Inject constructor(
 
     val gainLevel: StateFlow<Int> = preferencesRepository.audioLedGain
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioGain.DEFAULT_LEVEL)
+
+    val stockBehavior: StateFlow<StockBehaviorSettings> = preferencesRepository.stockBehaviorSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StockBehaviorSettings())
 
     fun toggleEnable(enabled: Boolean) {
         viewModelScope.launch {
@@ -63,6 +67,18 @@ class AudioLedViewModel @Inject constructor(
             if (isEnabled.value) {
                 hardwareRepository.setAudioGain(level)
             }
+        }
+    }
+
+    fun toggleAutoMusicSync(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateStockBehavior { it.copy(autoMusicSync = enabled) }
+        }
+    }
+
+    fun toggleAutoVolumeGain(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateStockBehavior { it.copy(autoVolumeGain = enabled) }
         }
     }
 }

@@ -21,17 +21,39 @@ class LH8nConfig : DeviceConfig {
         "Charged" to "00 02 02 00 00 00"
     )
 
+    /** Additional verified `store_tran_led_cmd` modes from `leds-aw22xxx.ko`. */
+    override val extraKernelEffects: Map<String, String> = mapOf(
+        "Power-On Alt" to "00 03 00 00 00 00",
+        "Notify Base" to "00 05 00 00 00 00",
+        "Ambient 0F" to "00 09 00 00 00 00",
+        "Music Dynamic" to "00 20 00 00 00 00",
+        "Music Static" to "00 20 01 00 00 00",
+        "Game Space" to "00 30 00 00 00 00",
+        "PUBG Hit" to "00 31 00 00 00 00",
+        "PUBG Shoot" to "00 31 01 00 00 00",
+        "PUBG Drive" to "00 31 02 00 00 00",
+        "MLBB First Blood" to "00 32 00 00 00 00",
+        "MLBB First Kill" to "00 32 01 00 00 00",
+        "MLBB Double Kill" to "00 32 02 00 00 00",
+        "MLBB Triple Kill" to "00 32 03 00 00 00",
+        "MLBB Quadra Kill" to "00 32 04 00 00 00",
+        "MLBB Penta Kill" to "00 32 05 00 00 00",
+        "MLBB More Kill" to "00 32 06 00 00 00"
+    )
+
     // Confirmed by live testing on hardware -- everything else is one-shot.
     override val loopingPatterns: Set<String> = setOf(
         "Soft",
         "Speed",
         "Illusion",
         "Breathe",
-        "Party"
+        "Party",
+        "Music Dynamic",
+        "Music Static"
     )
 
     override val defaultLowEffect: String = "Rise"
     override val defaultCriticalEffect: String = "Lightning"
-    override val defaultFullEffect: String = "Pureness"
+    override val defaultFullEffect: String = "Halo"
     override val turnOffHex: String = "00 01 00 00 00 00"
 }

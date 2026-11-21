@@ -2,7 +2,6 @@ package com.xiiann.ledsync.presentation.battery
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,24 +21,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Battery2Bar
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -55,9 +49,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.xiiann.ledsync.presentation.common.BlobIconBadge
+import com.xiiann.ledsync.presentation.common.ExpressiveBlob
+import com.xiiann.ledsync.presentation.common.ExpressiveTrackSlider
+import com.xiiann.ledsync.presentation.theme.LocalExtraColors
 import com.xiiann.ledsync.presentation.theme.bounceClick
 import kotlin.math.roundToInt
 
@@ -73,6 +72,7 @@ fun BatteryConfigScreen(
     val availableEffects = remember { deviceConfig.ledEffects.keys.toList().sorted() }
 
     val cs = MaterialTheme.colorScheme
+    val extra = LocalExtraColors.current
 
     Scaffold(
         containerColor = cs.surface,
@@ -95,361 +95,322 @@ fun BatteryConfigScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp)
         ) {
             // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .padding(top = 24.dp, bottom = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(cs.surfaceContainerHighest)
+                        .bounceClick(onClick = onBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = cs.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
+                Spacer(modifier = Modifier.width(14.dp))
                 Text(
                     text = "Battery LED Studio",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = cs.onSurface,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.6).sp,
+                    color = cs.onSurface
                 )
             }
 
+            // Circular Battery Gauge Tile
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(44.dp))
+                    .background(cs.surfaceContainer)
+                    .padding(vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Battery Gauge Ring Card
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    BatteryRingCard(level = liveBattery.level, isCharging = liveBattery.isCharging)
+                val ringColor = when {
+                    liveBattery.isCharging -> cs.primary
+                    liveBattery.level > 30 -> cs.primary
+                    liveBattery.level > 15 -> extra.warmAccent
+                    else -> cs.error
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Thresholds Section Header
+                Box(modifier = Modifier.size(150.dp), contentAlignment = Alignment.Center) {
+                    val trackColor = cs.surfaceContainerHighest
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val stroke = 16.dp.toPx()
+                        val radius = (size.minDimension - stroke) / 2
+                        val center = Offset(size.width / 2, size.height / 2)
+                        drawCircle(color = trackColor, radius = radius, center = center, style = Stroke(width = stroke))
+                        if (liveBattery.level > 0) {
+                            drawArc(
+                                color = ringColor,
+                                startAngle = -90f,
+                                sweepAngle = (liveBattery.level / 100f) * 360f,
+                                useCenter = false,
+                                topLeft = Offset(center.x - radius, center.y - radius),
+                                size = Size(radius * 2, radius * 2),
+                                style = Stroke(width = stroke, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "${liveBattery.level}%",
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = cs.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "TRIGGER THRESHOLDS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = cs.outline,
-                    letterSpacing = 1.2.sp
+                    text = if (liveBattery.isCharging) "CHARGING" else "BATTERY",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = cs.onSurfaceVariant
                 )
+            }
 
-                Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Trigger thresholds",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = cs.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            )
 
-                // Low Battery Slider (20% - 30% in discrete 2% steps)
-                M3ThresholdSliderCard(
-                    title = "Low Battery",
-                    value = config.lowThreshold.coerceIn(20, 30),
-                    range = 20f..30f,
-                    steps = 4,
-                    icon = Icons.Default.Battery2Bar,
-                    iconBg = cs.primaryContainer,
-                    iconTint = cs.onPrimaryContainer,
-                    sliderColor = cs.primary,
-                    onValueChange = { raw ->
-                        val rounded = ((raw / 2f).roundToInt() * 2).coerceIn(20, 30)
-                        viewModel.updateLowThreshold(rounded)
-                    }
-                )
+            // Low Battery Threshold Card
+            ExpressiveThresholdCard(
+                title = "Low battery",
+                subtitle = "Trigger threshold (20%–30%)",
+                value = config.lowThreshold.coerceIn(20, 30),
+                range = 20f..30f,
+                containerColor = extra.warmContainer,
+                contentColor = extra.onWarmContainer,
+                blob = ExpressiveBlob.TILTED_PEBBLE,
+                blobColor = extra.warmAccent,
+                icon = Icons.Default.Battery2Bar,
+                iconTint = cs.surface,
+                shape = RoundedCornerShape(topStart = 36.dp, topEnd = 14.dp, bottomEnd = 36.dp, bottomStart = 14.dp),
+                onValueChange = { raw ->
+                    val rounded = ((raw / 2f).roundToInt() * 2).coerceIn(20, 30)
+                    viewModel.updateLowThreshold(rounded)
+                }
+            )
 
-                Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-                // Critical Battery Slider (4% - 20% in discrete 2% steps)
-                M3ThresholdSliderCard(
-                    title = "Critical Battery",
-                    value = config.criticalThreshold.coerceIn(4, 20),
-                    range = 4f..20f,
-                    steps = 7,
-                    icon = Icons.Default.BatteryAlert,
-                    iconBg = cs.errorContainer,
-                    iconTint = cs.onErrorContainer,
-                    sliderColor = cs.error,
-                    onValueChange = { raw ->
-                        val rounded = ((raw / 2f).roundToInt() * 2).coerceIn(4, 20)
-                        viewModel.updateCriticalThreshold(rounded)
-                    }
-                )
+            // Critical Battery Threshold Card
+            ExpressiveThresholdCard(
+                title = "Critical battery",
+                subtitle = "Trigger threshold (4%–20%)",
+                value = config.criticalThreshold.coerceIn(4, 20),
+                range = 4f..20f,
+                containerColor = cs.errorContainer,
+                contentColor = cs.onErrorContainer,
+                blob = ExpressiveBlob.WAVE_BLOB,
+                blobColor = cs.error,
+                icon = Icons.Default.BatteryAlert,
+                iconTint = cs.onError,
+                shape = RoundedCornerShape(topStart = 14.dp, topEnd = 36.dp, bottomEnd = 14.dp, bottomStart = 36.dp),
+                onValueChange = { raw ->
+                    val rounded = ((raw / 2f).roundToInt() * 2).coerceIn(4, 20)
+                    viewModel.updateCriticalThreshold(rounded)
+                }
+            )
 
-                Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-                // Full Charge Slider (70% - 100% in discrete 5% steps)
-                M3ThresholdSliderCard(
-                    title = "Full Charge",
-                    value = config.fullThreshold.coerceIn(70, 100),
-                    range = 70f..100f,
-                    steps = 5,
-                    icon = Icons.Default.BatteryFull,
-                    iconBg = cs.tertiaryContainer,
-                    iconTint = cs.onTertiaryContainer,
-                    sliderColor = cs.tertiary,
-                    onValueChange = { raw ->
-                        val rounded = ((raw / 5f).roundToInt() * 5).coerceIn(70, 100)
-                        viewModel.updateFullThreshold(rounded)
-                    }
-                )
+            // Full Charge Threshold Card
+            ExpressiveThresholdCard(
+                title = "Full charge",
+                subtitle = "Trigger threshold (70%–100%)",
+                value = config.fullThreshold.coerceIn(70, 100),
+                range = 70f..100f,
+                containerColor = cs.tertiaryContainer,
+                contentColor = cs.onTertiaryContainer,
+                blob = ExpressiveBlob.CLOVER,
+                blobColor = cs.primary,
+                icon = Icons.Default.BatteryFull,
+                iconTint = cs.onPrimary,
+                shape = RoundedCornerShape(topStart = 36.dp, topEnd = 14.dp, bottomEnd = 36.dp, bottomStart = 14.dp),
+                onValueChange = { raw ->
+                    val rounded = ((raw / 5f).roundToInt() * 5).coerceIn(70, 100)
+                    viewModel.updateFullThreshold(rounded)
+                }
+            )
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Visual effects",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = cs.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            )
 
-                // Visual Effects Section Header
-                Text(
-                    text = "VISUAL EFFECTS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = cs.outline,
-                    letterSpacing = 1.2.sp
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Low Effect Row
-                M3EffectDropdownRow(
-                    label = "Low Battery Pattern",
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                GroupedEffectRow(
+                    label = "Low battery pattern",
                     hint = "default: Rise",
                     selectedEffect = config.lowEffectName,
                     availableEffects = availableEffects,
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
                     onSelect = { viewModel.updateLowEffect(it) }
                 )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Critical Effect Row
-                M3EffectDropdownRow(
-                    label = "Critical Battery Pattern",
+                GroupedEffectRow(
+                    label = "Critical battery pattern",
                     hint = "default: Lightning",
                     selectedEffect = config.criticalEffectName,
                     availableEffects = availableEffects,
-                    icon = Icons.Default.FlashOn,
+                    icon = Icons.Default.PriorityHigh,
+                    shape = RoundedCornerShape(12.dp),
                     onSelect = { viewModel.updateCriticalEffect(it) }
                 )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Full Effect Row
-                M3EffectDropdownRow(
-                    label = "Full Charge Pattern",
-                    hint = "default: Pureness",
+                GroupedEffectRow(
+                    label = "Charging plug-in pattern",
+                    hint = "stock: Charge Tiers (0–20 / 20–60 / 60–100)",
+                    selectedEffect = "Charge Tiers",
+                    availableEffects = emptyList(),
+                    icon = Icons.Default.Bolt,
+                    shape = RoundedCornerShape(12.dp),
+                    onSelect = {}
+                )
+                GroupedEffectRow(
+                    label = "Full charge pattern",
+                    hint = "default: Halo",
                     selectedEffect = config.fullEffectName,
                     availableEffects = availableEffects,
                     icon = Icons.Default.BatteryFull,
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 32.dp, bottomEnd = 32.dp),
                     onSelect = { viewModel.updateFullEffect(it) }
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Info Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Full-charge notification repeats while charging and automatically dismisses upon unplugging.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = cs.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(100.dp))
             }
+
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
 
 @Composable
-fun BatteryRingCard(level: Int, isCharging: Boolean) {
-    val cs = MaterialTheme.colorScheme
-    val ringColor = when {
-        isCharging -> cs.tertiary
-        level > 40 -> cs.primary
-        level > 20 -> Color(0xFFFFA726)
-        else -> cs.error
-    }
-
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(20.dp)
-                .size(120.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            val trackColor = cs.outlineVariant.copy(alpha = 0.35f)
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val stroke = 8.dp.toPx()
-                val radius = (size.minDimension - stroke) / 2
-                val center = Offset(size.width / 2, size.height / 2)
-
-                drawCircle(color = trackColor, radius = radius, center = center, style = Stroke(width = stroke))
-                if (level > 0) {
-                    val sweepAngle = (level / 100f) * 360f
-                    drawArc(
-                        color = ringColor,
-                        startAngle = -90f,
-                        sweepAngle = sweepAngle,
-                        useCenter = false,
-                        topLeft = Offset(center.x - radius, center.y - radius),
-                        size = Size(radius * 2, radius * 2),
-                        style = Stroke(width = stroke, cap = StrokeCap.Round)
-                    )
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "$level%",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = cs.onSurface
-                )
-                Text(
-                    text = if (isCharging) "CHARGING" else "BATTERY",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isCharging) cs.tertiary else cs.outline,
-                    letterSpacing = 1.2.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun M3ThresholdSliderCard(
+private fun ExpressiveThresholdCard(
     title: String,
+    subtitle: String,
     value: Int,
     range: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconBg: Color,
+    containerColor: Color,
+    contentColor: Color,
+    blob: ExpressiveBlob,
+    blobColor: Color,
+    icon: ImageVector,
     iconTint: Color,
-    sliderColor: Color,
+    shape: RoundedCornerShape,
     onValueChange: (Float) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(containerColor)
+            .padding(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(iconBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(imageVector = icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(20.dp))
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
-                    Text(text = "Trigger threshold (${range.start.toInt()}%–${range.endInclusive.toInt()}%)", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                }
-
-                // Numeric Badge Pill
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(cs.surfaceContainerHighest)
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "$value%",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = sliderColor
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Slider
-            Slider(
-                value = value.toFloat(),
-                onValueChange = onValueChange,
-                valueRange = range,
-                steps = steps,
-                colors = SliderDefaults.colors(
-                    thumbColor = sliderColor,
-                    activeTrackColor = sliderColor,
-                    inactiveTrackColor = cs.surfaceContainerHighest
-                ),
-                modifier = Modifier.fillMaxWidth()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BlobIconBadge(
+                blob = blob,
+                containerColor = blobColor,
+                icon = icon,
+                iconTint = iconTint,
+                size = 52.dp,
+                iconSize = 23.dp
             )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = contentColor)
+                Text(text = subtitle, fontSize = 13.sp, color = contentColor.copy(alpha = 0.78f))
+            }
+            Box(
+                modifier = Modifier
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(cs.surface)
+                    .padding(horizontal = 13.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "$value%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = contentColor)
+            }
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        ExpressiveTrackSlider(
+            value = value.toFloat(),
+            valueRange = range,
+            onValueChange = onValueChange,
+            activeColor = contentColor,
+            trackColor = cs.surfaceContainer
+        )
     }
 }
 
 @Composable
-fun M3EffectDropdownRow(
+private fun GroupedEffectRow(
     label: String,
     hint: String,
-    selectedEffect: String?,
+    selectedEffect: String,
     availableEffects: List<String>,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
+    shape: RoundedCornerShape,
     onSelect: (String?) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(cs.surfaceContainer)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(imageVector = icon, contentDescription = label, tint = cs.primary, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
-                Text(text = hint, style = MaterialTheme.typography.bodySmall, color = cs.outline)
+        Icon(imageVector = icon, contentDescription = label, tint = cs.primary, modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
+            Text(text = hint, fontSize = 13.sp, color = cs.onSurfaceVariant)
+        }
+
+        Box {
+            Row(
+                modifier = Modifier
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cs.surfaceContainerHighest)
+                    .then(if (availableEffects.isNotEmpty()) Modifier.bounceClick { expanded = true } else Modifier)
+                    .padding(start = 16.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = selectedEffect, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
+                if (availableEffects.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(imageVector = Icons.Default.ExpandMore, contentDescription = null, tint = cs.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
             }
 
-            Box {
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(cs.surfaceContainerHighest)
-                        .bounceClick { expanded = true }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = selectedEffect ?: "None", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = cs.outline, modifier = Modifier.size(18.dp))
-                }
-
+            if (availableEffects.isNotEmpty()) {
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     availableEffects.forEach { name ->
                         DropdownMenuItem(
-                            text = { Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
+                            text = { Text(name) },
                             onClick = {
                                 onSelect(name)
                                 expanded = false

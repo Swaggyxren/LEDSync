@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -24,14 +23,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,7 +45,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -67,12 +64,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -108,13 +105,14 @@ data class NavTab(
     val unselectedIcon: ImageVector
 )
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainShell(
     mainViewModel: MainViewModel = hiltViewModel()
 ) {
     val rootState by mainViewModel.rootState.collectAsState()
     val isNotifAccessGranted by mainViewModel.isNotifAccessGranted.collectAsState()
+    val appearanceMode by mainViewModel.appearanceMode.collectAsState()
+    val stockBehavior by mainViewModel.stockBehavior.collectAsState()
     var notifPopupDismissed by remember { mutableStateOf(false) }
 
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -123,9 +121,6 @@ fun MainShell(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Phone-call LED needs READ_PHONE_STATE -- request it once on launch if
-    // missing. LedCoreService checks the permission itself before
-    // registering, so a denial here just means that feature stays inactive.
     val phoneStatePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -137,7 +132,6 @@ fun MainShell(
         }
     }
 
-    // Re-check notification access when returning from Android System Settings
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -147,6 +141,18 @@ fun MainShell(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val openNotifSettings: () -> Unit = {
+        try {
+            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (_: Exception) {
+            context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 
@@ -160,7 +166,6 @@ fun MainShell(
 
     val cs = MaterialTheme.colorScheme
 
-    // Handle System Back Gesture / Physical Back Button
     BackHandler(enabled = currentSubDestination != SubDestination.None || selectedTab != 0) {
         if (currentSubDestination != SubDestination.None) {
             currentSubDestination = SubDestination.None
@@ -251,9 +256,10 @@ fun MainShell(
                                         val viewModel: HomeViewModel = hiltViewModel()
                                         HomeScreen(
                                             viewModel = viewModel,
-                                            onNavigateToPerformance = {
-                                                currentSubDestination = SubDestination.Performance
-                                            }
+                                            onNavigateToPerformance = { currentSubDestination = SubDestination.Performance },
+                                            onNavigateToAudioLed = { currentSubDestination = SubDestination.AudioLed },
+                                            onNavigateToAppAlerts = { currentSubDestination = SubDestination.AppAlerts },
+                                            onNavigateToBatteryConfig = { currentSubDestination = SubDestination.BatteryConfig }
                                         )
                                     }
                                     1 -> {
@@ -262,105 +268,80 @@ fun MainShell(
                                     }
                                     2 -> {
                                         TweaksScreen(
-                                            onNavigateToAppAlerts = {
-                                                currentSubDestination = SubDestination.AppAlerts
-                                            },
-                                            onNavigateToBatteryConfig = {
-                                                currentSubDestination = SubDestination.BatteryConfig
-                                            },
-                                            onNavigateToAudioLed = {
-                                                currentSubDestination = SubDestination.AudioLed
-                                            }
+                                            appearanceMode = appearanceMode,
+                                            stockBehavior = stockBehavior,
+                                            isNotifAccessGranted = isNotifAccessGranted,
+                                            isRootGranted = rootState == RootState.GRANTED,
+                                            onAppearanceChange = { mainViewModel.setAppearanceMode(it) },
+                                            onUpdateStockBehavior = { mainViewModel.updateStockBehavior(it) },
+                                            onOpenNotificationAccess = openNotifSettings,
+                                            onNavigateToAppAlerts = { currentSubDestination = SubDestination.AppAlerts },
+                                            onNavigateToBatteryConfig = { currentSubDestination = SubDestination.BatteryConfig },
+                                            onNavigateToAudioLed = { currentSubDestination = SubDestination.AudioLed }
                                         )
                                     }
                                 }
                             }
 
-                            // Expressive M3 Sliding Indicator Floating Navigation Dock
+                            // Figma-styled Floating Pill Dock (active pill flex = 1.5, bg = cs.primary)
                             Surface(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .navigationBarsPadding()
-                                    .padding(bottom = 16.dp),
-                                shape = CircleShape,
+                                    .padding(horizontal = 36.dp, vertical = 14.dp)
+                                    .fillMaxWidth()
+                                    .height(70.dp),
+                                shape = RoundedCornerShape(35.dp),
                                 color = cs.surfaceContainerHighest,
-                                tonalElevation = 8.dp,
-                                shadowElevation = 12.dp
+                                shadowElevation = 10.dp
                             ) {
-                                val indicatorOffset by animateDpAsState(
-                                    targetValue = (92 * selectedTab).dp,
-                                    animationSpec = spring(
-                                        stiffness = Spring.StiffnessMediumLow,
-                                        dampingRatio = Spring.DampingRatioLowBouncy
-                                    ),
-                                    label = "expressiveDockIndicatorOffset"
-                                )
-
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Sliding Pill Active Indicator
-                                    Box(
-                                        modifier = Modifier
-                                            .offset(x = indicatorOffset)
-                                            .width(88.dp)
-                                            .height(48.dp)
-                                            .clip(CircleShape)
-                                            .background(cs.primaryContainer)
-                                    )
-
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        tabs.forEachIndexed { index, tab ->
-                                            val selected = selectedTab == index
-                                            val iconTextColor by animateColorAsState(
-                                                targetValue = if (selected) cs.onPrimaryContainer else cs.outline,
-                                                animationSpec = spring(stiffness = Spring.StiffnessLow),
-                                                label = "tabIconTextColor"
+                                    tabs.forEachIndexed { index, tab ->
+                                        val selected = selectedTab == index
+                                        val itemWeight by animateFloatAsState(
+                                            targetValue = if (selected) 1.5f else 1f,
+                                            animationSpec = spring(
+                                                stiffness = Spring.StiffnessMediumLow,
+                                                dampingRatio = Spring.DampingRatioLowBouncy
+                                            ),
+                                            label = "dockWeight"
+                                        )
+                                        val bgColor by animateColorAsState(
+                                            targetValue = if (selected) cs.primary else Color.Transparent,
+                                            label = "dockBg"
+                                        )
+                                        val fgColor by animateColorAsState(
+                                            targetValue = if (selected) cs.onPrimary else cs.onSurfaceVariant,
+                                            label = "dockFg"
+                                        )
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(itemWeight)
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(29.dp))
+                                                .background(bgColor)
+                                                .bounceClick { selectedTab = index },
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                contentDescription = tab.title,
+                                                tint = fgColor,
+                                                modifier = Modifier.size(22.dp)
                                             )
-                                            val iconScale by animateFloatAsState(
-                                                targetValue = if (selected) 1.20f else 1.0f,
-                                                animationSpec = spring(
-                                                    stiffness = Spring.StiffnessMediumLow,
-                                                    dampingRatio = Spring.DampingRatioLowBouncy
-                                                ),
-                                                label = "tabIconScale"
+                                            Text(
+                                                text = tab.title,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = fgColor
                                             )
-
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(88.dp)
-                                                    .height(48.dp)
-                                                    .clip(CircleShape)
-                                                    .bounceClick { selectedTab = index },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Column(
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                                    verticalArrangement = Arrangement.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                                        contentDescription = tab.title,
-                                                        tint = iconTextColor,
-                                                        modifier = Modifier
-                                                            .size(20.dp)
-                                                            .graphicsLayer {
-                                                                scaleX = iconScale
-                                                                scaleY = iconScale
-                                                            }
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    Text(
-                                                        text = tab.title,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                                        color = iconTextColor
-                                                    )
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -372,7 +353,6 @@ fun MainShell(
         }
 
         // Notification Access Required Modal Popup Overlay
-        // Triggers ONLY when Root is already GRANTED and Notification Listener permission is not yet enabled
         if (rootState == RootState.GRANTED && !isNotifAccessGranted && !notifPopupDismissed) {
             Box(
                 modifier = Modifier
@@ -385,7 +365,7 @@ fun MainShell(
                         .fillMaxWidth(0.88f)
                         .padding(16.dp),
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
+                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer),
                     elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
                 ) {
                     Column(
@@ -429,19 +409,7 @@ fun MainShell(
                         Spacer(modifier = Modifier.height(24.dp))
 
                         Button(
-                            onClick = {
-                                try {
-                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {
-                                    val intent = Intent(Settings.ACTION_SETTINGS).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            },
+                            onClick = openNotifSettings,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),
@@ -477,7 +445,7 @@ fun MainShell(
             }
         }
 
-        // Root Permission Gate Dialog Overlay rendered ONLY when root check explicitly fails (RootState.DENIED)
+        // Root Permission Gate Dialog Overlay
         if (rootState == RootState.DENIED) {
             Box(
                 modifier = Modifier
@@ -490,7 +458,7 @@ fun MainShell(
                         .fillMaxWidth(0.88f)
                         .padding(16.dp),
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
+                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer),
                     elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
                 ) {
                     Column(

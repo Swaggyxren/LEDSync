@@ -1,21 +1,12 @@
 package com.xiiann.ledsync.presentation.home
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,12 +20,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Battery5Bar
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,27 +35,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiiann.ledsync.BuildConfig
-import com.xiiann.ledsync.R
+import com.xiiann.ledsync.presentation.common.BlobIconBadge
+import com.xiiann.ledsync.presentation.common.ExpressiveBlob
+import com.xiiann.ledsync.presentation.common.LightBeltHeroArtwork
+import com.xiiann.ledsync.presentation.theme.LocalExtraColors
 import com.xiiann.ledsync.presentation.theme.bounceClick
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onNavigateToPerformance: () -> Unit
+    onNavigateToPerformance: () -> Unit,
+    onNavigateToAudioLed: () -> Unit,
+    onNavigateToAppAlerts: () -> Unit,
+    onNavigateToBatteryConfig: () -> Unit
 ) {
     val deviceInfo by viewModel.deviceInfo.collectAsState()
     val liveStats by viewModel.liveStats.collectAsState()
+    val masterEnabled by viewModel.masterEnabled.collectAsState()
+    val isSuppressed by viewModel.isSuppressed.collectAsState()
+    val suppressionReason by viewModel.suppressionReason.collectAsState()
 
     val cs = MaterialTheme.colorScheme
+    val extra = LocalExtraColors.current
+    val serviceActive = masterEnabled && !isSuppressed
 
     Box(
         modifier = Modifier
@@ -75,360 +74,482 @@ fun HomeScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .padding(horizontal = 18.dp)
         ) {
             // Header
-            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            Column(modifier = Modifier.padding(top = 24.dp, bottom = 18.dp)) {
                 Text(
                     text = "LED Sync",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = cs.onSurface,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-1).sp,
+                    color = cs.onSurface
                 )
-            }
-
-            // Compact Hardware Status Card with Artwork Banner
-            M3DeviceCard(deviceInfo = deviceInfo)
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Stat Cards Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                M3StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Battery",
-                    value = if (liveStats.batteryLevel > 0) "${liveStats.batteryLevel}%" else "Reading…",
-                    subtitle = if (liveStats.isCharging) "CHARGING" else "BATTERY",
-                    icon = Icons.Default.BatteryStd,
-                    iconBg = cs.primaryContainer,
-                    iconTint = cs.onPrimaryContainer
-                )
-                M3StatCard(
-                    modifier = Modifier.weight(1f),
-                    title = "LED Matrix",
-                    value = "Active",
-                    subtitle = "SYSFS ACTIVE",
-                    icon = Icons.Default.Lightbulb,
-                    iconBg = cs.secondaryContainer,
-                    iconTint = cs.onSecondaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Performance Section Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "System Performance",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = cs.onSurface,
-                    fontWeight = FontWeight.Bold
+                    text = "Device overview",
+                    fontSize = 15.sp,
+                    color = cs.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Row(
+            }
+
+            // Hero Device Card
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 44.dp, topEnd = 44.dp, bottomEnd = 44.dp, bottomStart = 14.dp))
+                    .background(cs.surfaceContainer)
+            ) {
+                Box(
                     modifier = Modifier
-                        .clip(CircleShape)
-                        .background(cs.surfaceContainerHigh)
-                        .bounceClick(onClick = onNavigateToPerformance)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth()
+                        .height(177.dp)
+                ) {
+                    LightBeltHeroArtwork(
+                        isActive = serviceActive,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    val modeChipText = when {
+                        !masterEnabled -> "Manual · Paused"
+                        isSuppressed -> "Guard · ${suppressionReason ?: "Paused"}"
+                        else -> "Auto · Normal"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 24.dp, top = 22.dp)
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(cs.primaryContainer)
+                            .padding(horizontal = 13.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = modeChipText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = cs.onPrimaryContainer
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 18.dp, end = 18.dp)
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (masterEnabled) cs.primary else cs.surfaceContainerHighest)
+                            .bounceClick { viewModel.toggleMasterEnabled() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = "Toggle LED service",
+                            tint = if (masterEnabled) cs.onPrimary else cs.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)
                 ) {
                     Text(
-                        text = "Live Monitor",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = cs.primary
+                        text = deviceInfo.model,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.5).sp,
+                        lineHeight = 28.sp,
+                        color = cs.onSurface
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = cs.primary,
-                        modifier = Modifier.size(13.dp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = deviceInfo.androidVersion,
+                        fontSize = 13.sp,
+                        color = cs.onSurface.copy(alpha = 0.75f)
                     )
+                    if (deviceInfo.kernelVersion.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = deviceInfo.kernelVersion,
+                            fontSize = 12.sp,
+                            color = cs.onSurface.copy(alpha = 0.6f),
+                            maxLines = 2
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (serviceActive) cs.primary else cs.surfaceContainerHighest)
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(if (serviceActive) cs.onPrimary else cs.outline)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                !masterEnabled -> "LED service: OFF"
+                                isSuppressed -> "LED service: GUARDED"
+                                else -> "LED service: ACTIVE"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (serviceActive) cs.onPrimary else cs.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            M3PerformanceCard(
-                cpuPct = liveStats.cpuPct,
-                ramUsedMb = liveStats.ramUsedMb,
-                ramTotalMb = liveStats.ramTotalMb
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Developer Name & App Version Footer
+            // Asymmetric Battery + Sysfs Tiles
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(138.dp)
+                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 40.dp, bottomEnd = 14.dp, bottomStart = 40.dp))
+                        .background(extra.accentContainer)
+                        .bounceClick(onClick = onNavigateToBatteryConfig)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    BlobIconBadge(
+                        blob = ExpressiveBlob.TILTED_PEBBLE,
+                        containerColor = cs.primary,
+                        icon = Icons.Default.Battery5Bar,
+                        iconTint = cs.onPrimary
+                    )
+                    Column {
+                        Text(
+                            text = if (liveStats.isCharging) "Battery · Charging" else "Battery",
+                            fontSize = 13.sp,
+                            color = extra.onAccentContainer.copy(alpha = 0.78f)
+                        )
+                        Text(
+                            text = if (liveStats.batteryLevel > 0) "${liveStats.batteryLevel}%" else "--%",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.4).sp,
+                            color = extra.onAccentContainer
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(138.dp)
+                        .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 14.dp, bottomEnd = 40.dp, bottomStart = 14.dp))
+                        .background(cs.tertiaryContainer)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    BlobIconBadge(
+                        blob = ExpressiveBlob.CLOVER,
+                        containerColor = cs.primary,
+                        icon = Icons.Default.Lightbulb,
+                        iconTint = cs.onPrimary
+                    )
+                    Column {
+                        Text(
+                            text = "Sysfs",
+                            fontSize = 13.sp,
+                            color = cs.onTertiaryContainer.copy(alpha = 0.78f)
+                        )
+                        Text(
+                            text = if (deviceInfo.isRooted) "Active" else "Pending",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.4).sp,
+                            color = cs.onTertiaryContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(26.dp))
+
+            // Controls Bento Section
+            Text(
+                text = "Controls",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = cs.onSurface,
+                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(232.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Tall Audio Reactive LED Card
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(topStart = 44.dp, topEnd = 14.dp, bottomEnd = 44.dp, bottomStart = 14.dp))
+                        .background(cs.primary)
+                        .bounceClick(onClick = onNavigateToAudioLed)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    BlobIconBadge(
+                        blob = ExpressiveBlob.SUNBURST,
+                        containerColor = cs.onPrimary,
+                        icon = Icons.Default.GraphicEq,
+                        iconTint = cs.primary,
+                        size = 64.dp,
+                        iconSize = 29.dp
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        val bars = listOf(0.30f, 0.67f, 0.34f, 0.71f, 0.38f, 0.75f, 0.42f, 0.79f)
+                        bars.forEach { frac ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(frac)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(cs.onPrimary.copy(alpha = 0.8f))
+                            )
+                        }
+                    }
+
+                    Column {
+                        Text(
+                            text = "Audio Reactive LED",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.3).sp,
+                            color = cs.onPrimary
+                        )
+                        Text(
+                            text = "Spectrum or static",
+                            fontSize = 13.sp,
+                            color = cs.onPrimary.copy(alpha = 0.78f)
+                        )
+                    }
+                }
+
+                // Stacked App Sync + Battery Studio Cards
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 40.dp, bottomEnd = 14.dp, bottomStart = 40.dp))
+                            .background(cs.secondaryContainer)
+                            .bounceClick(onClick = onNavigateToAppAlerts)
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        BlobIconBadge(
+                            blob = ExpressiveBlob.SOFT_DIAMOND,
+                            containerColor = cs.primary,
+                            icon = Icons.Default.Apps,
+                            iconTint = cs.onPrimary,
+                            size = 44.dp,
+                            iconSize = 20.dp
+                        )
+                        Text(
+                            text = "App LED Sync",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.3).sp,
+                            color = cs.onSecondaryContainer
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 14.dp, bottomEnd = 40.dp, bottomStart = 14.dp))
+                            .background(extra.warmContainer)
+                            .bounceClick(onClick = onNavigateToBatteryConfig)
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        BlobIconBadge(
+                            blob = ExpressiveBlob.WAVE_BLOB,
+                            containerColor = cs.primary,
+                            icon = Icons.Default.Bolt,
+                            iconTint = cs.onPrimary,
+                            size = 44.dp,
+                            iconSize = 20.dp
+                        )
+                        Text(
+                            text = "Battery LED Studio",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.3).sp,
+                            color = extra.onWarmContainer
+                        )
+                    }
+                }
+            }
+
+            // System Performance Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, top = 26.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "System performance",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = cs.onSurface
+                )
+                Row(
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(19.dp))
+                        .background(cs.secondaryContainer)
+                        .bounceClick(onClick = onNavigateToPerformance)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Live Monitor",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = cs.onPrimaryContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // Performance Summary Card
+            val cpuPct = liveStats.cpuPct.coerceIn(0f, 1f)
+            val ramFrac = if (liveStats.ramTotalMb > 0) {
+                (liveStats.ramUsedMb.toFloat() / liveStats.ramTotalMb.toFloat()).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 44.dp, bottomEnd = 44.dp, bottomStart = 44.dp))
+                    .background(cs.surfaceContainer)
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "CPU load", fontWeight = FontWeight.SemiBold, color = cs.onSurface)
+                    Text(
+                        text = "${(cpuPct * 100).toInt()}%",
+                        fontWeight = FontWeight.Bold,
+                        color = cs.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(cs.secondaryContainer)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(cpuPct.coerceAtLeast(0.03f))
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(cs.primary)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "RAM allocation", fontWeight = FontWeight.SemiBold, color = cs.onSurface)
+                    Text(
+                        text = if (liveStats.ramTotalMb > 0) {
+                            "${"%.1f".format(liveStats.ramUsedMb / 1024f)} / ${"%.1f".format(liveStats.ramTotalMb / 1024f)} GB"
+                        } else {
+                            "0.0 / 0.0 GB"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        color = cs.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(cs.secondaryContainer)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(ramFrac.coerceAtLeast(0.03f))
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(cs.outlineVariant)
+                    )
+                }
+            }
+
+            // Footer
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = "Xi'annnnnn / @kasajin001",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cs.outline
+                    fontSize = 13.sp,
+                    color = cs.onSurfaceVariant
                 )
                 Text(
                     text = "v${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = cs.primary
                 )
             }
 
-            // Expanded bottom spacer to guarantee complete clearance above floating dock
-            Spacer(modifier = Modifier.height(130.dp))
-        }
-    }
-}
-
-@Composable
-fun M3DeviceCard(deviceInfo: DeviceInfoState) {
-    val cs = MaterialTheme.colorScheme
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
-    ) {
-        Column {
-            // Compact Header Banner Image Box (130dp height)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.card_banner),
-                    contentDescription = "Device Banner",
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize()
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    cs.surfaceContainerHigh.copy(alpha = 0.4f),
-                                    cs.surfaceContainerHigh
-                                )
-                            )
-                        )
-                )
-            }
-
-            // Compact Card Details
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                // Device Model Title
-                Text(
-                    text = deviceInfo.model,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = cs.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Android Version Subtitle
-                Text(
-                    text = deviceInfo.androidVersion,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = cs.onSurfaceVariant
-                )
-
-                if (deviceInfo.kernelVersion.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = deviceInfo.kernelVersion,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp
-                        ),
-                        color = cs.outline.copy(alpha = 0.7f),
-                        maxLines = 2
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Root Status Line
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ExpressiveMorphingStatusIndicator(isRooted = deviceInfo.isRooted)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Root Status: ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = cs.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (deviceInfo.isRooted) "ACTIVE" else "INACTIVE",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (deviceInfo.isRooted) cs.primary else cs.error
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ExpressiveMorphingStatusIndicator(isRooted: Boolean) {
-    val cs = MaterialTheme.colorScheme
-    val color = if (isRooted) cs.primary else cs.error
-
-    val transition = rememberInfiniteTransition(label = "expressiveMorphingPulse")
-    val cornerRadiusFraction by transition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 0.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "morphCorner"
-    )
-
-    val morphRadius by animateDpAsState(
-        targetValue = if (isRooted) (20 * cornerRadiusFraction).dp else 4.dp,
-        animationSpec = spring(),
-        label = "morphRadius"
-    )
-
-    Box(contentAlignment = Alignment.Center) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(RoundedCornerShape(morphRadius))
-                .background(color.copy(alpha = 0.35f))
-        )
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-    }
-}
-
-@Composable
-fun M3StatCard(
-    modifier: Modifier = Modifier,
-    title: String,
-    value: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconBg: Color,
-    iconTint: Color
-) {
-    val cs = MaterialTheme.colorScheme
-
-    Card(
-        modifier = modifier.bounceClick(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(iconBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(imageVector = icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(18.dp))
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(text = subtitle, style = MaterialTheme.typography.labelSmall, color = cs.outline, letterSpacing = 1.1.sp)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
-        }
-    }
-}
-
-@Composable
-fun M3PerformanceCard(
-    cpuPct: Float,
-    ramUsedMb: Int,
-    ramTotalMb: Int
-) {
-    val cs = MaterialTheme.colorScheme
-    val ramFrac = if (ramTotalMb > 0) (ramUsedMb.toFloat() / ramTotalMb.toFloat()).coerceIn(0f, 1f) else 0f
-
-    val animatedCpu by animateFloatAsState(
-        targetValue = cpuPct.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-        label = "smoothCpuLine"
-    )
-
-    val animatedRam by animateFloatAsState(
-        targetValue = ramFrac,
-        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-        label = "smoothRamLine"
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "CPU Load", style = MaterialTheme.typography.titleMedium, color = cs.onSurface)
-                Text(text = "${(cpuPct * 100).toInt()}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.primary)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { animatedCpu },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = cs.primary,
-                trackColor = cs.surfaceContainerHighest
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "RAM Allocation", style = MaterialTheme.typography.titleMedium, color = cs.onSurface)
-                Text(
-                    text = if (ramTotalMb > 0) "${(ramUsedMb / 1024f).let { "%.1f".format(it) }} GB / ${(ramTotalMb / 1024f).let { "%.1f".format(it) }} GB" else "Reading…",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = cs.secondary
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { animatedRam },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = cs.secondary,
-                trackColor = cs.surfaceContainerHighest
-            )
+            Spacer(modifier = Modifier.height(110.dp))
         }
     }
 }

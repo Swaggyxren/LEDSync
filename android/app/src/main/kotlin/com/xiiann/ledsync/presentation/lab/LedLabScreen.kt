@@ -1,9 +1,9 @@
 package com.xiiann.ledsync.presentation.lab
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,12 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Emergency
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Loop
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,18 +51,20 @@ import com.xiiann.ledsync.data.repository.LogEntry
 import com.xiiann.ledsync.data.repository.LogLevel
 import com.xiiann.ledsync.presentation.theme.ConsoleBg
 import com.xiiann.ledsync.presentation.theme.ConsoleBlue
-import com.xiiann.ledsync.presentation.theme.ConsoleBorder
 import com.xiiann.ledsync.presentation.theme.ConsoleError
+import com.xiiann.ledsync.presentation.theme.ConsoleHeaderBg
+import com.xiiann.ledsync.presentation.theme.ConsoleMuted
 import com.xiiann.ledsync.presentation.theme.ConsoleSuccess
 import com.xiiann.ledsync.presentation.theme.ConsoleWarning
 import com.xiiann.ledsync.presentation.theme.bounceClick
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LedLabScreen(viewModel: LedLabViewModel) {
     val isReady by viewModel.isReady.collectAsState()
     val actionLogs by viewModel.actionLogs.collectAsState()
     var activeEffect by remember { mutableStateOf<String?>(null) }
+    var showKernelExtra by remember { mutableStateOf(false) }
     val deviceConfig = remember { viewModel.getDeviceConfig() }
 
     val cs = MaterialTheme.colorScheme
@@ -77,136 +75,186 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             .background(cs.surface)
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = 18.dp)
     ) {
-        // Top Title Bar
-        Text(
-            text = "Hardware Lab",
-            style = MaterialTheme.typography.displayMedium,
-            color = cs.onSurface,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 14.dp)
-        )
-
-        // Console Section Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // Header
+        Column(modifier = Modifier.padding(top = 24.dp, bottom = 18.dp)) {
             Text(
-                text = "LOG CONSOLE",
-                style = MaterialTheme.typography.labelSmall,
-                color = cs.outline,
-                letterSpacing = 1.2.sp
+                text = "Hardware Lab",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = (-1).sp,
+                color = cs.onSurface
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "sysfs v2",
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                color = cs.primary
+                text = "Effect presets and live console",
+                fontSize = 15.sp,
+                color = cs.onSurfaceVariant
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Log Console Card
+        // Terminal Log Console
         AospLogConsole(
             logs = actionLogs,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
+                .height(210.dp)
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Effect Grid Header
+        // Core Effect Presets Header
         Text(
-            text = "EFFECT PRESETS",
-            style = MaterialTheme.typography.labelSmall,
-            color = cs.outline,
-            letterSpacing = 1.2.sp
+            text = "Effect presets",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = cs.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        PresetChipGrid(
+            presets = deviceConfig.ledEffects,
+            loopingPatterns = deviceConfig.loopingPatterns,
+            activeEffect = activeEffect,
+            enabled = isReady,
+            onSelect = { name, hex ->
+                activeEffect = name
+                viewModel.sendEffect(name, hex)
+            }
+        )
 
-        // Expressive Segmented Container with Morphing Tiles
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            deviceConfig.ledEffects.forEach { (name, hex) ->
-                val selected = activeEffect == name
-                val isLooping = deviceConfig.loopingPatterns.contains(name)
-
-                // Shape Morphing (MaterialShapes + Morph corner transition)
-                val morphRadius by animateDpAsState(
-                    targetValue = if (selected) 24.dp else if (isLooping) 16.dp else 8.dp,
-                    animationSpec = spring(),
-                    label = "expressiveShapeMorph"
+        if (deviceConfig.extraKernelEffects.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cs.surfaceContainer)
+                    .bounceClick { showKernelExtra = !showKernelExtra }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Kernel Extra (${deviceConfig.extraKernelEffects.size})",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onSurface
+                    )
+                    Text(
+                        text = "PUBG, MLBB & raw aw22xxx store_tran_led_cmd modes",
+                        fontSize = 12.sp,
+                        color = cs.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = if (showKernelExtra) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = cs.onSurfaceVariant
                 )
+            }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(morphRadius))
-                        .background(if (selected) cs.primaryContainer else cs.surfaceContainerHigh)
-                        .bounceClick(enabled = isReady) {
+            AnimatedVisibility(visible = showKernelExtra) {
+                Box(modifier = Modifier.padding(top = 10.dp)) {
+                    PresetChipGrid(
+                        presets = deviceConfig.extraKernelEffects,
+                        loopingPatterns = deviceConfig.loopingPatterns,
+                        activeEffect = activeEffect,
+                        enabled = isReady,
+                        onSelect = { name, hex ->
                             activeEffect = name
                             viewModel.sendEffect(name, hex)
                         }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selected) cs.onPrimaryContainer else cs.onSurfaceVariant
-                        )
-                        if (isLooping) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = Icons.Default.Loop,
-                                contentDescription = null,
-                                modifier = Modifier.size(13.dp),
-                                tint = if (selected) cs.onPrimaryContainer else cs.outline
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(26.dp))
 
-        // Emergency Hardware Reset Button
-        Button(
-            onClick = {
-                activeEffect = null
-                viewModel.emergencyKillAndRevive()
-            },
+        // Emergency Hardware Reset Pill Button
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = cs.error,
-                contentColor = cs.onError
-            )
+                .height(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(cs.error)
+                .bounceClick {
+                    activeEffect = null
+                    viewModel.emergencyKillAndRevive()
+                },
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = Icons.Default.Emergency, contentDescription = "Kill", modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.Emergency,
+                contentDescription = "Emergency Hardware Reset",
+                tint = cs.onError,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = "EMERGENCY HARDWARE RESET",
-                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
+                fontSize = 14.sp,
+                letterSpacing = 0.3.sp,
+                color = cs.onError
             )
         }
 
-        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.height(110.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PresetChipGrid(
+    presets: Map<String, String>,
+    loopingPatterns: Set<String>,
+    activeEffect: String?,
+    enabled: Boolean,
+    onSelect: (String, String) -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        presets.forEach { (name, hex) ->
+            val selected = activeEffect == name
+            val isLooping = loopingPatterns.contains(name)
+            val corner by animateDpAsState(
+                targetValue = if (selected) 14.dp else 23.dp,
+                animationSpec = spring(),
+                label = "presetChipCorner"
+            )
+            Row(
+                modifier = Modifier
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(corner))
+                    .background(if (selected) cs.primary else cs.surfaceContainer)
+                    .bounceClick(enabled = enabled) { onSelect(name, hex) }
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) cs.onPrimary else cs.onSurface
+                )
+                if (isLooping) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Loop,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (selected) cs.onPrimary else cs.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -215,10 +263,7 @@ fun AospLogConsole(
     logs: List<LogEntry>,
     modifier: Modifier = Modifier
 ) {
-    val cs = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
-
-    // Take recent logs to keep UI light and fast
     val recentLogs = remember(logs) { logs.takeLast(60) }
 
     LaunchedEffect(recentLogs.size) {
@@ -227,65 +272,63 @@ fun AospLogConsole(
         }
     }
 
-    Card(
-        modifier = modifier.border(1.dp, ConsoleBorder.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = ConsoleBg)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomEnd = 14.dp, bottomStart = 44.dp))
+            .background(ConsoleBg)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(cs.surfaceContainerHighest.copy(alpha = 0.4f))
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFF2B8B5)))
-                Spacer(modifier = Modifier.width(5.dp))
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFFBBF24)))
-                Spacer(modifier = Modifier.width(5.dp))
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF6DD585)))
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "led-console ~ su",
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = cs.outline
-                )
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ConsoleHeaderBg)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(ConsoleError))
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(ConsoleWarning))
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(ConsoleSuccess))
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "led-console ~ su",
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                color = ConsoleMuted
+            )
+        }
 
-            // Log stream
-            Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                if (recentLogs.isEmpty()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (recentLogs.isEmpty()) {
+                item {
                     Text(
-                        text = "No LED activity recorded.\nSelect an effect preset below.",
-                        fontSize = 11.sp,
+                        text = "[00:00:00] Initializing hardware components…",
+                        fontSize = 12.5.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = ConsoleBlue.copy(alpha = 0.4f),
-                        modifier = Modifier.align(Alignment.Center)
+                        color = ConsoleBlue
                     )
-                } else {
-                    LazyColumn(state = listState) {
-                        items(
-                            items = recentLogs,
-                            key = { entry -> entry.id }
-                        ) { entry ->
-                            val color = when (entry.level) {
-                                LogLevel.SUCCESS -> ConsoleSuccess
-                                LogLevel.WARNING -> ConsoleWarning
-                                LogLevel.ERROR -> ConsoleError
-                                LogLevel.INFO -> ConsoleBlue
-                            }
-                            Text(
-                                text = entry.message,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = color,
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
-                        }
+                }
+            } else {
+                items(recentLogs, key = { it.id }) { log ->
+                    val textColor = when (log.level) {
+                        LogLevel.SUCCESS -> ConsoleSuccess
+                        LogLevel.WARNING -> ConsoleWarning
+                        LogLevel.ERROR -> ConsoleError
+                        LogLevel.INFO -> ConsoleBlue
                     }
+                    Text(
+                        text = log.message,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = textColor
+                    )
                 }
             }
         }

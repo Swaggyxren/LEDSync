@@ -5,6 +5,8 @@ interface DeviceConfig {
     val awPath: String
     val lbCmd: String
     val ledEffects: Map<String, String>
+    val extraKernelEffects: Map<String, String>
+        get() = emptyMap()
     val loopingPatterns: Set<String>
     val turnOffHex: String
         get() = "00 01 00 00 00 00"
@@ -17,4 +19,7 @@ interface DeviceConfig {
     val defaultLowEffect: String
     val defaultCriticalEffect: String
     val defaultFullEffect: String
+
+    fun hexForEffect(name: String): String? =
+        ledEffects[name] ?: extraKernelEffects[name]
 }

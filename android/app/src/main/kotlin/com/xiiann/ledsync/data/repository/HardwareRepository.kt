@@ -24,6 +24,7 @@ enum class LedOwner(val priority: Int) {
     MUSIC(10),
     BATTERY(20),
     NOTIFICATION(30),
+    CALL(35),
     MANUAL(40)
 }
 
@@ -42,7 +43,14 @@ class HardwareRepository @Inject constructor(
     private var activeConfig: DeviceConfig = LH8nConfig()
     private var isLightActive = false
 
-    var masterEnabled: Boolean = true
+    private val _masterEnabledFlow = MutableStateFlow(true)
+    val masterEnabledFlow: StateFlow<Boolean> = _masterEnabledFlow.asStateFlow()
+
+    var masterEnabled: Boolean
+        get() = _masterEnabledFlow.value
+        set(value) {
+            _masterEnabledFlow.value = value
+        }
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
@@ -52,6 +60,12 @@ class HardwareRepository @Inject constructor(
 
     private val _actionLogs = MutableStateFlow<List<LogEntry>>(emptyList())
     val actionLogs: StateFlow<List<LogEntry>> = _actionLogs.asStateFlow()
+
+    private val _isSuppressed = MutableStateFlow(false)
+    val isSuppressed: StateFlow<Boolean> = _isSuppressed.asStateFlow()
+
+    private val _suppressionReason = MutableStateFlow<String?>(null)
+    val suppressionReason: StateFlow<String?> = _suppressionReason.asStateFlow()
 
     private val ownerLock = Any()
     private var currentOwner: LedOwner? = null
@@ -96,7 +110,7 @@ class HardwareRepository @Inject constructor(
             val gain = savedMusicGain
             Triple(currentOwner == null, mode, gain)
         }
-        if (shouldRestore) {
+        if (shouldRestore && masterEnabled && !_isSuppressed.value) {
             val (enabled, prefMode, prefGain) = getSavedAudioLedSettings()
             if (enabled) {
                 val modeToUse = musicMode ?: prefMode
@@ -151,19 +165,66 @@ class HardwareRepository @Inject constructor(
         return ok
     }
 
+    /**
+     * Primes the AW22xxx hardware once per active window.
+     * Kernel driver `leds-aw22xxx.ko`:
+     *  - `hwen=1` calls `aw22xxx_hw_reset()`
+     *  - `imax=c` (`0x0c`) is the maximum valid ceiling before kernel `BUG_ON`
+     *  - `00 00 00 00 00 00` sets `soft_show_en = 1` and queues `aw22xxx_led_lamp_init_show`
+     * Intentionally avoids writing `brightness` (which queues competing `aw22xxx_brightness_work` 0x82).
+     */
     suspend fun ensureLedEnabled(force: Boolean = false): Boolean {
         if (isLightActive && !force) return true
         val cfg = activeConfig
         val cmd = "echo 1 > ${cfg.awPath}/hwen; " +
-                "echo c > ${cfg.awPath}/imax 2>/dev/null || true; " +
-                "echo 255 > ${cfg.awPath}/brightness; " +
-                "echo none > ${cfg.awPath}/trigger 2>/dev/null || true; " +
-                "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}"
+            "echo c > ${cfg.awPath}/imax 2>/dev/null || true; " +
+            "echo none > ${cfg.awPath}/trigger 2>/dev/null || true; " +
+            "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}"
         val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
         if (ok) {
             isLightActive = true
         }
         return ok
+    }
+
+    /**
+     * Sends a single effect command when already active.
+     * `aw22xxx_task_work` stops the previous effect in hardware before loading the new one,
+     * so we avoid the `00 01 -> 00 00` prefix and skip redundant 40ms kernel `msleep(20)` stalls.
+     */
+    private suspend fun writeEffectHex(hex: String): Boolean {
+        ensureLedEnabled()
+        return rootExecutor.runSuWithRetry(
+            "echo -n '$hex' > ${activeConfig.lbCmd}",
+            maxRetries = 1,
+            delayMs = 150L
+        )
+    }
+
+    suspend fun setMasterEnabled(enabled: Boolean): Boolean {
+        masterEnabled = enabled
+        if (!enabled) {
+            val ok = turnOffAll()
+            log("[${dateFormat.format(Date())}] Master LED service paused", LogLevel.WARNING)
+            return ok
+        }
+        log("[${dateFormat.format(Date())}] Master LED service resumed", LogLevel.SUCCESS)
+        val ok = ensureLedEnabled(force = true)
+        releaseAndRestore(LedOwner.MANUAL, restoreDelayMs = 150L)
+        return ok
+    }
+
+    suspend fun updateSuppression(suppressed: Boolean, reason: String? = null) {
+        val prev = _isSuppressed.value
+        _isSuppressed.value = suppressed
+        _suppressionReason.value = if (suppressed) reason else null
+        if (suppressed && !prev) {
+            log("[${dateFormat.format(Date())}] Guard active (${reason ?: "suppressed"}) — pausing LED", LogLevel.INFO)
+            turnOffAll()
+        } else if (!suppressed && prev) {
+            log("[${dateFormat.format(Date())}] Guard cleared — restoring LED state", LogLevel.INFO)
+            releaseAndRestore(LedOwner.MANUAL, restoreDelayMs = 150L)
+        }
     }
 
     suspend fun setAudioReactiveMode(mode: AudioLedMode, gainLevel: Int = AudioGain.DEFAULT_LEVEL): Boolean {
@@ -175,17 +236,40 @@ class HardwareRepository @Inject constructor(
         preferencesRepository.setAudioLedDynamic(mode == AudioLedMode.DYNAMIC)
         preferencesRepository.setAudioLedGain(gainLevel)
 
+        if (!masterEnabled || _isSuppressed.value) return false
         if (!tryAcquire(LedOwner.MUSIC)) return false
-        ensureLedEnabled()
-        val cfg = activeConfig
-        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; " +
-                "echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; " +
-                "echo -n '${mode.hex}' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
-        log("[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
+        val ok = writeEffectHex(mode.hex)
+        log(
+            "[${dateFormat.format(Date())}] AUDIO_MODE[${mode.label}] -> ok=$ok hex='${mode.hex}'",
+            if (ok) LogLevel.SUCCESS else LogLevel.ERROR
+        )
         if (ok) {
             delay(100L)
             setAudioGain(gainLevel)
+        }
+        return ok
+    }
+
+    suspend fun activateAutoMusicSync(
+        mode: AudioLedMode,
+        gainHex: String? = null,
+        gainLevel: Int = AudioGain.DEFAULT_LEVEL
+    ): Boolean {
+        if (!masterEnabled || _isSuppressed.value) return false
+        if (!tryAcquire(LedOwner.MUSIC)) return false
+        val ok = writeEffectHex(mode.hex)
+        log(
+            "[${dateFormat.format(Date())}] AUTO_MUSIC[${mode.label}] -> ok=$ok hex='${mode.hex}'",
+            if (ok) LogLevel.SUCCESS else LogLevel.ERROR
+        )
+        if (ok) {
+            delay(100L)
+            val gainCmd = if (gainHex != null) {
+                AudioGain.commandFromHex(gainHex)
+            } else {
+                AudioGain.command(gainLevel)
+            }
+            rootExecutor.runSuWithRetry("echo -n '$gainCmd' > ${activeConfig.lbCmd}", maxRetries = 1, delayMs = 150L)
         }
         return ok
     }
@@ -195,10 +279,22 @@ class HardwareRepository @Inject constructor(
             savedMusicGain = level
         }
         preferencesRepository.setAudioLedGain(level)
-        val cfg = activeConfig
         val cmd = AudioGain.command(level)
-        val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
-        log("[${dateFormat.format(Date())}] AUDIO_GAIN[level=$level] -> ok=$ok hex='$cmd'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
+        val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${activeConfig.lbCmd}", maxRetries = 1, delayMs = 150L)
+        log(
+            "[${dateFormat.format(Date())}] AUDIO_GAIN[level=$level] -> ok=$ok hex='$cmd'",
+            if (ok) LogLevel.SUCCESS else LogLevel.ERROR
+        )
+        return ok
+    }
+
+    suspend fun setAudioGainHex(hexByte: String): Boolean {
+        val cmd = AudioGain.commandFromHex(hexByte)
+        val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${activeConfig.lbCmd}", maxRetries = 1, delayMs = 150L)
+        log(
+            "[${dateFormat.format(Date())}] AUDIO_GAIN_VOL[hex=$hexByte] -> ok=$ok cmd='$cmd'",
+            if (ok) LogLevel.INFO else LogLevel.ERROR
+        )
         return ok
     }
 
@@ -208,53 +304,62 @@ class HardwareRepository @Inject constructor(
             if (currentOwner == LedOwner.MUSIC) currentOwner = null
         }
         preferencesRepository.setAudioLedEnabled(false)
-        val cfg = activeConfig
-        val ok = rootExecutor.runSuWithRetry("echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}", maxRetries = 1, delayMs = 150L)
+        val ok = rootExecutor.runSuWithRetry(
+            "echo -n '${activeConfig.turnOffHex}' > ${activeConfig.lbCmd}",
+            maxRetries = 1,
+            delayMs = 150L
+        )
+        if (ok) isLightActive = false
         log("[${dateFormat.format(Date())}] AUDIO_MODE[OFF] -> ok=$ok", if (ok) LogLevel.INFO else LogLevel.ERROR)
         return ok
     }
 
     suspend fun sendRawHex(hex: String, tag: String = "RAW", owner: LedOwner = LedOwner.MANUAL): Boolean {
         if (!masterEnabled) return false
+        if (owner != LedOwner.MANUAL && _isSuppressed.value) return false
         if (!tryAcquire(owner)) return false
-        ensureLedEnabled()
-        val cfg = activeConfig
-        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
+        val ok = writeEffectHex(hex)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
     suspend fun fireEffect(hex: String, tag: String = "FIRE", owner: LedOwner = LedOwner.NOTIFICATION): Boolean {
-        if (!masterEnabled) return false
+        if (!masterEnabled || _isSuppressed.value) return false
         if (!tryAcquire(owner)) return false
-        ensureLedEnabled()
-        val cfg = activeConfig
-        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
+        val ok = writeEffectHex(hex)
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.SUCCESS else LogLevel.ERROR)
         return ok
     }
 
     suspend fun fireStop(hex: String = activeConfig.turnOffHex, tag: String = "STOP", owner: LedOwner = LedOwner.NOTIFICATION): Boolean {
-        val cfg = activeConfig
-        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '$hex' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
+        val ok = rootExecutor.runSuWithRetry(
+            "echo -n '$hex' > ${activeConfig.lbCmd}",
+            maxRetries = 1,
+            delayMs = 150L
+        )
+        if (ok && hex == activeConfig.turnOffHex) {
+            isLightActive = false
+        }
         log("[${dateFormat.format(Date())}] $tag -> ok=$ok hex='$hex'", if (ok) LogLevel.INFO else LogLevel.ERROR)
         releaseAndRestore(owner, restoreDelayMs = 500L)
         return ok
     }
 
-    suspend fun ringPhoneCall(): Boolean =
-        fireEffect(activeConfig.phoneCallHex, "CALL_RINGING", owner = LedOwner.NOTIFICATION)
+    suspend fun ringPhoneCall(patternName: String = "Soft"): Boolean {
+        val hex = activeConfig.hexForEffect(patternName) ?: activeConfig.phoneCallHex
+        return fireEffect(hex, "CALL_RINGING[$patternName]", owner = LedOwner.CALL)
+    }
 
     suspend fun endPhoneCall(): Boolean =
-        fireStop(activeConfig.turnOffHex, "CALL_ENDED", owner = LedOwner.NOTIFICATION)
+        fireStop(activeConfig.turnOffHex, "CALL_ENDED", owner = LedOwner.CALL)
 
     suspend fun turnOffAll(): Boolean {
         val cfg = activeConfig
-        val cmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; echo -n '00 00 00 00 00 00' > ${cfg.lbCmd}; echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}"
-        val ok = rootExecutor.runSuWithRetry(cmd, maxRetries = 1, delayMs = 150L)
+        val ok = rootExecutor.runSuWithRetry(
+            "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}",
+            maxRetries = 1,
+            delayMs = 150L
+        )
         isLightActive = false
         synchronized(ownerLock) {
             currentOwner = null
@@ -268,8 +373,8 @@ class HardwareRepository @Inject constructor(
         log("[${dateFormat.format(Date())}] Emergency Stop — killing LED service…", LogLevel.WARNING)
         val cfg = activeConfig
         val killCmd = "echo -n '${cfg.turnOffHex}' > ${cfg.lbCmd}; " +
-                "echo 0 > ${cfg.awPath}/brightness; " +
-                "echo 0 > ${cfg.awPath}/hwen"
+            "echo 0 > ${cfg.awPath}/brightness; " +
+            "echo 0 > ${cfg.awPath}/hwen"
         rootExecutor.runSu(killCmd)
         isLightActive = false
         synchronized(ownerLock) {
