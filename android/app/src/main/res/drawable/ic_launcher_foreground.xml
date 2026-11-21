@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Central prism core -->
+    <path
+        android:fillColor="#4A3F72"
+        android:pathData="M59,49 L45.5,55 L59,67 Z" />
+    <path
+        android:fillColor="#CCBEFF"
+        android:fillAlpha="0.38"
+        android:pathData="M56.5,52.8 L49.5,55.9 L56.5,62.2 Z" />
+
+    <!-- Outer soft cobalt LED aura -->
+    <path
+        android:pathData="M59,-2 L59,67 M-2,76.1 L59,49 M45.5,55 L103,106.1"
+        android:strokeWidth="11.5"
+        android:strokeColor="#38689DFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Mid glow halo -->
+    <path
+        android:pathData="M59,-2 L59,67 M-2,76.1 L59,49 M45.5,55 L103,106.1"
+        android:strokeWidth="7.2"
+        android:strokeColor="#7090B8FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Primary LED strip body -->
+    <path
+        android:pathData="M59,-2 L59,67 M-2,76.1 L59,49 M45.5,55 L103,106.1"
+        android:strokeWidth="4.4"
+        android:strokeColor="#AAC7FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Hot inner LED diffuser core -->
+    <path
+        android:pathData="M59,-2 L59,66.2 M-2,76.1 L59,49 M45.5,55 L103,106.1"
+        android:strokeWidth="1.7"
+        android:strokeColor="#EAF2FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
