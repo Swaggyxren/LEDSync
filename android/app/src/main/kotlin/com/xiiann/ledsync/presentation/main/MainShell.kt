@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,7 +16,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -63,8 +66,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -228,10 +236,23 @@ fun MainShell(
                         )
                     }
                     is SubDestination.None -> {
+                        var dockVisible by remember { mutableStateOf(true) }
+                        LaunchedEffect(selectedTab) { dockVisible = true }
+                        val dockNestedScroll = remember {
+                            object : NestedScrollConnection {
+                                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                                    if (available.y < -8f) dockVisible = false
+                                    else if (available.y > 8f) dockVisible = true
+                                    return Offset.Zero
+                                }
+                            }
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(cs.surface)
+                                .nestedScroll(dockNestedScroll)
                         ) {
                             AnimatedContent(
                                 targetState = selectedTab,
@@ -283,65 +304,95 @@ fun MainShell(
                                 }
                             }
 
-                            // Figma-styled Floating Pill Dock (active pill flex = 1.5, bg = cs.primary)
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 36.dp, vertical = 14.dp)
-                                    .fillMaxWidth()
-                                    .height(70.dp),
-                                shape = RoundedCornerShape(35.dp),
-                                color = cs.surfaceContainerHighest,
-                                shadowElevation = 10.dp
+                            // Slim Floating Pill Dock with bottom gradient scrim + scroll auto-hide
+                            AnimatedVisibility(
+                                visible = dockVisible,
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                                enter = fadeIn() + slideInVertically(
+                                    initialOffsetY = { it },
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                ),
+                                exit = fadeOut() + slideOutVertically(
+                                    targetOffsetY = { it },
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                )
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.BottomCenter
                                 ) {
-                                    tabs.forEachIndexed { index, tab ->
-                                        val selected = selectedTab == index
-                                        val itemWeight by animateFloatAsState(
-                                            targetValue = if (selected) 1.5f else 1f,
-                                            animationSpec = spring(
-                                                stiffness = Spring.StiffnessMediumLow,
-                                                dampingRatio = Spring.DampingRatioLowBouncy
-                                            ),
-                                            label = "dockWeight"
-                                        )
-                                        val bgColor by animateColorAsState(
-                                            targetValue = if (selected) cs.primary else Color.Transparent,
-                                            label = "dockBg"
-                                        )
-                                        val fgColor by animateColorAsState(
-                                            targetValue = if (selected) cs.onPrimary else cs.onSurfaceVariant,
-                                            label = "dockFg"
-                                        )
-                                        Column(
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        Color.Transparent,
+                                                        cs.surface.copy(alpha = 0.85f),
+                                                        cs.surface
+                                                    )
+                                                )
+                                            )
+                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .navigationBarsPadding()
+                                            .padding(horizontal = 48.dp, vertical = 10.dp)
+                                            .fillMaxWidth()
+                                            .height(60.dp),
+                                        shape = RoundedCornerShape(30.dp),
+                                        color = cs.surfaceContainerHighest,
+                                        shadowElevation = 8.dp
+                                    ) {
+                                        Row(
                                             modifier = Modifier
-                                                .weight(itemWeight)
-                                                .fillMaxHeight()
-                                                .clip(RoundedCornerShape(29.dp))
-                                                .background(bgColor)
-                                                .bounceClick { selectedTab = index },
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
+                                                .fillMaxSize()
+                                                .padding(5.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                                contentDescription = tab.title,
-                                                tint = fgColor,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                            Text(
-                                                text = tab.title,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = fgColor
-                                            )
+                                            tabs.forEachIndexed { index, tab ->
+                                                val selected = selectedTab == index
+                                                val itemWeight by animateFloatAsState(
+                                                    targetValue = if (selected) 1.45f else 1f,
+                                                    animationSpec = spring(
+                                                        stiffness = Spring.StiffnessMediumLow,
+                                                        dampingRatio = Spring.DampingRatioLowBouncy
+                                                    ),
+                                                    label = "dockWeight"
+                                                )
+                                                val bgColor by animateColorAsState(
+                                                    targetValue = if (selected) cs.primary else Color.Transparent,
+                                                    label = "dockBg"
+                                                )
+                                                val fgColor by animateColorAsState(
+                                                    targetValue = if (selected) cs.onPrimary else cs.onSurfaceVariant,
+                                                    label = "dockFg"
+                                                )
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(itemWeight)
+                                                        .fillMaxHeight()
+                                                        .clip(RoundedCornerShape(25.dp))
+                                                        .background(bgColor)
+                                                        .bounceClick { selectedTab = index },
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                        contentDescription = tab.title,
+                                                        tint = fgColor,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Text(
+                                                        text = tab.title,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = fgColor
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

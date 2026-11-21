@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DoNotDisturbOn
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
@@ -80,52 +79,43 @@ fun TweaksScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp)
     ) {
-        Column(modifier = Modifier.padding(top = 24.dp, bottom = 18.dp)) {
+        Column(modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)) {
             Text(
                 text = "Tweaks",
-                fontSize = 32.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-1).sp,
+                letterSpacing = (-0.8).sp,
                 color = cs.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Modes, triggers and preferences",
-                fontSize = 15.sp,
+                text = "Appearance, access & stock guards",
+                fontSize = 14.sp,
                 color = cs.onSurfaceVariant
             )
         }
 
-        // Primary Feature Navigation Group
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            GroupedNavRow(
-                title = "Audio Reactive LED",
-                subtitle = "Spectrum and static modes",
-                blob = ExpressiveBlob.SUNBURST,
-                blobColor = cs.primary,
+        // Compact quick-jump row (avoids duplicating full Home Controls cards)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            QuickJumpChip(
+                label = "Audio LED",
                 icon = Icons.Default.GraphicEq,
-                iconTint = cs.onPrimary,
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
+                modifier = Modifier.weight(1f),
                 onClick = onNavigateToAudioLed
             )
-            GroupedNavRow(
-                title = "App LED Sync",
-                subtitle = "Per-app effect mapping",
-                blob = ExpressiveBlob.SOFT_DIAMOND,
-                blobColor = cs.surfaceContainerHighest,
+            QuickJumpChip(
+                label = "App Sync",
                 icon = Icons.Default.Apps,
-                iconTint = cs.onSurface,
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
                 onClick = onNavigateToAppAlerts
             )
-            GroupedNavRow(
-                title = "Battery LED Studio",
-                subtitle = "Triggers and patterns",
-                blob = ExpressiveBlob.WAVE_BLOB,
-                blobColor = extra.warmContainer,
+            QuickJumpChip(
+                label = "Battery",
                 icon = Icons.Default.Bolt,
-                iconTint = extra.onWarmContainer,
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 32.dp, bottomEnd = 32.dp),
+                modifier = Modifier.weight(1f),
                 onClick = onNavigateToBatteryConfig
             )
         }
@@ -136,13 +126,13 @@ fun TweaksScreen(
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 8.dp)
         )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(cs.surfaceContainerHighest)
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -152,15 +142,15 @@ fun TweaksScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(24.dp))
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
                         .background(if (selected) cs.primary else Color.Transparent)
                         .bounceClick { onAppearanceChange(mode) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = mode.label,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (selected) cs.onPrimary else cs.onSurfaceVariant
                     )
@@ -174,7 +164,7 @@ fun TweaksScreen(
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 8.dp)
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -269,7 +259,7 @@ fun TweaksScreen(
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 8.dp)
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -455,49 +445,41 @@ fun TweaksScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(110.dp))
+        Spacer(modifier = Modifier.height(88.dp))
     }
 }
 
 @Composable
-private fun GroupedNavRow(
-    title: String,
-    subtitle: String,
-    blob: ExpressiveBlob,
-    blobColor: Color,
+private fun QuickJumpChip(
+    label: String,
     icon: ImageVector,
-    iconTint: Color,
-    shape: RoundedCornerShape,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
+        modifier = modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(19.dp))
             .background(cs.surfaceContainer)
             .bounceClick(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        BlobIconBadge(
-            blob = blob,
-            containerColor = blobColor,
-            icon = icon,
-            iconTint = iconTint,
-            size = 52.dp,
-            iconSize = 23.dp
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
-            Text(text = subtitle, fontSize = 13.sp, color = cs.onSurfaceVariant)
-        }
         Icon(
-            imageVector = Icons.Default.ChevronRight,
+            imageVector = icon,
             contentDescription = null,
-            tint = cs.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
+            tint = cs.primary,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = cs.onSurface,
+            maxLines = 1
         )
     }
 }

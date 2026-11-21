@@ -39,7 +39,8 @@ class AudioLedTileService : TileService() {
             if (newState) {
                 val isDynamic = preferencesRepository.audioLedDynamic.first()
                 hardwareRepository.setAudioReactiveMode(
-                    if (isDynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC
+                    mode = if (isDynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC,
+                    overrideManual = true
                 )
             } else {
                 hardwareRepository.turnOffAudioReactive()

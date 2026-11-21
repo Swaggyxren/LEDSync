@@ -1,6 +1,7 @@
 package com.xiiann.ledsync.data.repository
 
 import com.xiiann.ledsync.data.executor.IRootExecutor
+import com.xiiann.ledsync.domain.model.AudioLedMode
 import com.xiiann.ledsync.domain.model.LH8nConfig
 import io.mockk.every
 import io.mockk.mockk
@@ -116,5 +117,39 @@ class HardwareRepositoryTest {
         assertTrue(repository.isReady.value)
         assertEquals(2, mockExecutor.executedCommands.size)
         assertTrue(mockExecutor.executedCommands[0].contains("echo 0 >"))
+    }
+
+    @Test
+    fun `explicit audio toggle overrides manual lab preset while auto music does not`() = runTest {
+        repository.ensureLedEnabled(force = false)
+        assertTrue(repository.sendRawHex("00 05 01 02 00 00", "Halo", owner = LedOwner.MANUAL))
+
+        // Background auto-music still yields to MANUAL
+        assertFalse(repository.activateAutoMusicSync(AudioLedMode.DYNAMIC))
+
+        // Explicit user Audio Reactive toggle overrides MANUAL and writes MUSIC + gain
+        val countBefore = mockExecutor.executedCommands.size
+        assertTrue(repository.setAudioReactiveMode(AudioLedMode.DYNAMIC, gainLevel = 4, overrideManual = true))
+        assertTrue(mockExecutor.executedCommands.size >= countBefore + 2)
+        assertTrue(mockExecutor.executedCommands[countBefore].contains(AudioLedMode.DYNAMIC.hex))
+    }
+
+    @Test
+    fun `audio gain and turn off do not stomp higher-priority call or suppressed guard`() = runTest {
+        repository.ensureLedEnabled(force = false)
+        assertTrue(repository.ringPhoneCall("Soft"))
+        val countDuringCall = mockExecutor.executedCommands.size
+
+        assertFalse(repository.setAudioGain(5))
+        assertTrue(repository.turnOffAudioReactive())
+        assertEquals(countDuringCall, mockExecutor.executedCommands.size)
+
+        repository.endPhoneCall()
+        assertTrue(repository.setAudioReactiveMode(AudioLedMode.STATIC, gainLevel = 3, overrideManual = true))
+        repository.updateSuppression(true, "Rear camera active")
+        val countSuppressed = mockExecutor.executedCommands.size
+        assertFalse(repository.setAudioGain(6))
+        assertFalse(repository.setAudioGainHex("01"))
+        assertEquals(countSuppressed, mockExecutor.executedCommands.size)
     }
 }

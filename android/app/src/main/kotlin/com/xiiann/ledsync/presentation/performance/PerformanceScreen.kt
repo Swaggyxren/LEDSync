@@ -1,5 +1,8 @@
 package com.xiiann.ledsync.presentation.performance
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +44,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiiann.ledsync.presentation.common.BlobIconBadge
@@ -144,6 +148,11 @@ fun PerformanceScreen(
             val ramTotal = metrics.ramTotalMb
             val ramAvail = (ramTotal - ramUsed).coerceAtLeast(0)
             val ramFrac = if (ramTotal > 0) (ramUsed.toFloat() / ramTotal.toFloat()).coerceIn(0f, 1f) else 0f
+            val animatedRamFrac by animateFloatAsState(
+                targetValue = ramFrac.coerceAtLeast(0.03f),
+                animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+                label = "perfRamBar"
+            )
 
             Column(
                 modifier = Modifier
@@ -175,7 +184,7 @@ fun PerformanceScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(ramFrac.coerceAtLeast(0.03f))
+                            .fillMaxWidth(animatedRamFrac)
                             .height(20.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(cs.primary)
@@ -199,6 +208,11 @@ fun PerformanceScreen(
             val storageTotal = metrics.storageTotalGb
             val storageFree = (storageTotal - storageUsed).coerceAtLeast(0f)
             val storageFrac = if (storageTotal > 0f) (storageUsed / storageTotal).coerceIn(0f, 1f) else 0f
+            val animatedStorageFrac by animateFloatAsState(
+                targetValue = storageFrac.coerceAtLeast(0.03f),
+                animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+                label = "perfStorageBar"
+            )
 
             Column(
                 modifier = Modifier
@@ -230,7 +244,7 @@ fun PerformanceScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(storageFrac.coerceAtLeast(0.03f))
+                            .fillMaxWidth(animatedStorageFrac)
                             .height(20.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(cs.tertiary)
@@ -297,11 +311,19 @@ fun AospStatChip(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(cs.surfaceContainerHighest)
-            .padding(14.dp)
+            .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
         Text(text = label, fontSize = 13.sp, color = cs.onSurfaceVariant)
         Spacer(modifier = Modifier.height(2.dp))
-        Text(text = value, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onSurface, maxLines = 1)
+        Text(
+            text = value,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = cs.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

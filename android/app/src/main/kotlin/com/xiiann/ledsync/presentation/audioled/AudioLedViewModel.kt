@@ -39,7 +39,8 @@ class AudioLedViewModel @Inject constructor(
                 val dynamic = isDynamic.value
                 hardwareRepository.setAudioReactiveMode(
                     mode = if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC,
-                    gainLevel = gainLevel.value
+                    gainLevel = gainLevel.value,
+                    overrideManual = true
                 )
             } else {
                 hardwareRepository.turnOffAudioReactive()
@@ -53,7 +54,8 @@ class AudioLedViewModel @Inject constructor(
             if (isEnabled.value) {
                 hardwareRepository.setAudioReactiveMode(
                     mode = if (dynamic) AudioLedMode.DYNAMIC else AudioLedMode.STATIC,
-                    gainLevel = gainLevel.value
+                    gainLevel = gainLevel.value,
+                    overrideManual = true
                 )
             }
         }

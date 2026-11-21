@@ -227,10 +227,17 @@ class HardwareRepository @Inject constructor(
         }
     }
 
-    suspend fun setAudioReactiveMode(mode: AudioLedMode, gainLevel: Int = AudioGain.DEFAULT_LEVEL): Boolean {
+    suspend fun setAudioReactiveMode(
+        mode: AudioLedMode,
+        gainLevel: Int = AudioGain.DEFAULT_LEVEL,
+        overrideManual: Boolean = false
+    ): Boolean {
         synchronized(ownerLock) {
             savedMusicMode = mode
             savedMusicGain = gainLevel
+            if (overrideManual && currentOwner == LedOwner.MANUAL) {
+                currentOwner = null
+            }
         }
         preferencesRepository.setAudioLedEnabled(true)
         preferencesRepository.setAudioLedDynamic(mode == AudioLedMode.DYNAMIC)
@@ -279,6 +286,9 @@ class HardwareRepository @Inject constructor(
             savedMusicGain = level
         }
         preferencesRepository.setAudioLedGain(level)
+        if (!masterEnabled || _isSuppressed.value) return false
+        val isMusicOwner = synchronized(ownerLock) { currentOwner == LedOwner.MUSIC }
+        if (!isMusicOwner) return false
         val cmd = AudioGain.command(level)
         val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${activeConfig.lbCmd}", maxRetries = 1, delayMs = 150L)
         log(
@@ -289,6 +299,9 @@ class HardwareRepository @Inject constructor(
     }
 
     suspend fun setAudioGainHex(hexByte: String): Boolean {
+        if (!masterEnabled || _isSuppressed.value) return false
+        val isMusicOwner = synchronized(ownerLock) { currentOwner == LedOwner.MUSIC }
+        if (!isMusicOwner) return false
         val cmd = AudioGain.commandFromHex(hexByte)
         val ok = rootExecutor.runSuWithRetry("echo -n '$cmd' > ${activeConfig.lbCmd}", maxRetries = 1, delayMs = 150L)
         log(
@@ -299,11 +312,17 @@ class HardwareRepository @Inject constructor(
     }
 
     suspend fun turnOffAudioReactive(): Boolean {
-        synchronized(ownerLock) {
+        val shouldTurnOffHw = synchronized(ownerLock) {
             savedMusicMode = null
+            val owned = currentOwner == LedOwner.MUSIC || currentOwner == null
             if (currentOwner == LedOwner.MUSIC) currentOwner = null
+            owned
         }
         preferencesRepository.setAudioLedEnabled(false)
+        if (!shouldTurnOffHw) {
+            log("[${dateFormat.format(Date())}] AUDIO_MODE[OFF] (deferred — higher priority owner active)", LogLevel.INFO)
+            return true
+        }
         val ok = rootExecutor.runSuWithRetry(
             "echo -n '${activeConfig.turnOffHex}' > ${activeConfig.lbCmd}",
             maxRetries = 1,

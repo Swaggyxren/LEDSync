@@ -1,5 +1,8 @@
 package com.xiiann.ledsync.presentation.home
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,18 +81,18 @@ fun HomeScreen(
                 .padding(horizontal = 18.dp)
         ) {
             // Header
-            Column(modifier = Modifier.padding(top = 24.dp, bottom = 18.dp)) {
+            Column(modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)) {
                 Text(
                     text = "LED Sync",
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-1).sp,
+                    letterSpacing = (-0.8).sp,
                     color = cs.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Device overview",
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     color = cs.onSurfaceVariant
                 )
             }
@@ -97,13 +101,14 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 44.dp, topEnd = 44.dp, bottomEnd = 44.dp, bottomStart = 14.dp))
+                    .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp, bottomEnd = 36.dp, bottomStart = 14.dp))
                     .background(cs.surfaceContainer)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(177.dp)
+                        .height(136.dp)
+                        .clipToBounds()
                 ) {
                     LightBeltHeroArtwork(
                         isActive = serviceActive,
@@ -153,17 +158,17 @@ fun HomeScreen(
                 }
 
                 Column(
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 18.dp)
                 ) {
                     Text(
                         text = deviceInfo.model,
-                        fontSize = 24.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.5).sp,
-                        lineHeight = 28.sp,
+                        letterSpacing = (-0.4).sp,
+                        lineHeight = 25.sp,
                         color = cs.onSurface
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = deviceInfo.androidVersion,
                         fontSize = 13.sp,
@@ -217,28 +222,30 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .height(138.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 40.dp, bottomEnd = 14.dp, bottomStart = 40.dp))
+                        .height(114.dp)
+                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 36.dp, bottomEnd = 14.dp, bottomStart = 36.dp))
                         .background(extra.accentContainer)
                         .bounceClick(onClick = onNavigateToBatteryConfig)
-                        .padding(18.dp),
+                        .padding(14.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     BlobIconBadge(
                         blob = ExpressiveBlob.TILTED_PEBBLE,
                         containerColor = cs.primary,
                         icon = Icons.Default.Battery5Bar,
-                        iconTint = cs.onPrimary
+                        iconTint = cs.onPrimary,
+                        size = 42.dp,
+                        iconSize = 20.dp
                     )
                     Column {
                         Text(
                             text = if (liveStats.isCharging) "Battery · Charging" else "Battery",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = extra.onAccentContainer.copy(alpha = 0.78f)
                         )
                         Text(
                             text = if (liveStats.batteryLevel > 0) "${liveStats.batteryLevel}%" else "--%",
-                            fontSize = 22.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = (-0.4).sp,
                             color = extra.onAccentContainer
@@ -249,27 +256,29 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .height(138.dp)
-                        .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 14.dp, bottomEnd = 40.dp, bottomStart = 14.dp))
+                        .height(114.dp)
+                        .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 14.dp, bottomEnd = 36.dp, bottomStart = 14.dp))
                         .background(cs.tertiaryContainer)
-                        .padding(18.dp),
+                        .padding(14.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     BlobIconBadge(
                         blob = ExpressiveBlob.CLOVER,
                         containerColor = cs.primary,
                         icon = Icons.Default.Lightbulb,
-                        iconTint = cs.onPrimary
+                        iconTint = cs.onPrimary,
+                        size = 42.dp,
+                        iconSize = 20.dp
                     )
                     Column {
                         Text(
                             text = "Sysfs",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = cs.onTertiaryContainer.copy(alpha = 0.78f)
                         )
                         Text(
                             text = if (deviceInfo.isRooted) "Active" else "Pending",
-                            fontSize = 22.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = (-0.4).sp,
                             color = cs.onTertiaryContainer
@@ -278,21 +287,21 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(26.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Controls Bento Section
             Text(
                 text = "Controls",
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = cs.onSurface,
-                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(232.dp),
+                    .height(246.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Tall Audio Reactive LED Card
@@ -361,10 +370,10 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 40.dp, bottomEnd = 14.dp, bottomStart = 40.dp))
+                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 36.dp, bottomEnd = 14.dp, bottomStart = 36.dp))
                             .background(cs.secondaryContainer)
                             .bounceClick(onClick = onNavigateToAppAlerts)
-                            .padding(18.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         BlobIconBadge(
@@ -372,12 +381,12 @@ fun HomeScreen(
                             containerColor = cs.primary,
                             icon = Icons.Default.Apps,
                             iconTint = cs.onPrimary,
-                            size = 44.dp,
-                            iconSize = 20.dp
+                            size = 40.dp,
+                            iconSize = 18.dp
                         )
                         Text(
                             text = "App LED Sync",
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = (-0.3).sp,
                             color = cs.onSecondaryContainer
@@ -388,10 +397,10 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 14.dp, bottomEnd = 40.dp, bottomStart = 14.dp))
+                            .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 14.dp, bottomEnd = 36.dp, bottomStart = 14.dp))
                             .background(extra.warmContainer)
                             .bounceClick(onClick = onNavigateToBatteryConfig)
-                            .padding(18.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         BlobIconBadge(
@@ -399,12 +408,13 @@ fun HomeScreen(
                             containerColor = cs.primary,
                             icon = Icons.Default.Bolt,
                             iconTint = cs.onPrimary,
-                            size = 44.dp,
-                            iconSize = 20.dp
+                            size = 40.dp,
+                            iconSize = 18.dp
                         )
                         Text(
                             text = "Battery LED Studio",
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
+                            lineHeight = 19.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = (-0.3).sp,
                             color = extra.onWarmContainer
@@ -417,13 +427,13 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 4.dp, end = 4.dp, top = 26.dp, bottom = 12.dp),
+                    .padding(start = 4.dp, end = 4.dp, top = 18.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "System performance",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = cs.onSurface
                 )
@@ -459,6 +469,16 @@ fun HomeScreen(
             } else {
                 0f
             }
+            val animatedCpuPct by animateFloatAsState(
+                targetValue = cpuPct.coerceAtLeast(0.03f),
+                animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+                label = "homeCpuBar"
+            )
+            val animatedRamFrac by animateFloatAsState(
+                targetValue = ramFrac.coerceAtLeast(0.03f),
+                animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+                label = "homeRamBar"
+            )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -487,7 +507,7 @@ fun HomeScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(cpuPct.coerceAtLeast(0.03f))
+                            .fillMaxWidth(animatedCpuPct)
                             .height(20.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(cs.primary)
@@ -521,10 +541,10 @@ fun HomeScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(ramFrac.coerceAtLeast(0.03f))
+                            .fillMaxWidth(animatedRamFrac)
                             .height(20.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(cs.outlineVariant)
+                            .background(cs.tertiary)
                     )
                 }
             }
@@ -549,7 +569,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(110.dp))
+            Spacer(modifier = Modifier.height(88.dp))
         }
     }
 }

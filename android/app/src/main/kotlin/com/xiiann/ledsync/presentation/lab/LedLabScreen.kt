@@ -77,21 +77,55 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp)
     ) {
-        // Header
-        Column(modifier = Modifier.padding(top = 24.dp, bottom = 18.dp)) {
-            Text(
-                text = "Hardware Lab",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-1).sp,
-                color = cs.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Effect presets and live console",
-                fontSize = 15.sp,
-                color = cs.onSurfaceVariant
-            )
+        // Header + top-right Emergency Reset pill
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Hardware Lab",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.8).sp,
+                    color = cs.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Effect presets and live console",
+                    fontSize = 14.sp,
+                    color = cs.onSurfaceVariant
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(cs.errorContainer)
+                    .bounceClick {
+                        activeEffect = null
+                        viewModel.emergencyKillAndRevive()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Emergency,
+                    contentDescription = "Emergency Hardware Reset",
+                    tint = cs.onErrorContainer,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Reset",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = cs.onErrorContainer
+                )
+            }
         }
 
         // Terminal Log Console
@@ -99,7 +133,7 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             logs = actionLogs,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp)
+                .height(168.dp)
         )
 
         // Core Effect Presets Header
@@ -108,7 +142,7 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, top = 24.dp, bottom = 12.dp)
+            modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 10.dp)
         )
 
         PresetChipGrid(
@@ -170,39 +204,7 @@ fun LedLabScreen(viewModel: LedLabViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(26.dp))
-
-        // Emergency Hardware Reset Pill Button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(cs.error)
-                .bounceClick {
-                    activeEffect = null
-                    viewModel.emergencyKillAndRevive()
-                },
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Emergency,
-                contentDescription = "Emergency Hardware Reset",
-                tint = cs.onError,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "EMERGENCY HARDWARE RESET",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                letterSpacing = 0.3.sp,
-                color = cs.onError
-            )
-        }
-
-        Spacer(modifier = Modifier.height(110.dp))
+        Spacer(modifier = Modifier.height(88.dp))
     }
 }
 
@@ -218,29 +220,29 @@ private fun PresetChipGrid(
     val cs = MaterialTheme.colorScheme
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         presets.forEach { (name, hex) ->
             val selected = activeEffect == name
             val isLooping = loopingPatterns.contains(name)
             val corner by animateDpAsState(
-                targetValue = if (selected) 14.dp else 23.dp,
+                targetValue = if (selected) 12.dp else 20.dp,
                 animationSpec = spring(),
                 label = "presetChipCorner"
             )
             Row(
                 modifier = Modifier
-                    .height(46.dp)
+                    .height(40.dp)
                     .clip(RoundedCornerShape(corner))
                     .background(if (selected) cs.primary else cs.surfaceContainer)
                     .bounceClick(enabled = enabled) { onSelect(name, hex) }
-                    .padding(horizontal = 18.dp),
+                    .padding(horizontal = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = name,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (selected) cs.onPrimary else cs.onSurface
                 )
